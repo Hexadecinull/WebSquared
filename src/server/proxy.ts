@@ -56,7 +56,7 @@ function buildRequestHeaders(req: Request, targetUrl: string): Record<string, st
 }
 
 export async function handleProxy(req: Request, res: Response): Promise<void> {
-  const encodedPart = req.path.slice(PREFIX.length);
+  const encodedPart = req.path.slice(1);
 
   let targetUrl: string;
   try {
