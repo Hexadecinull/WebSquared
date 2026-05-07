@@ -7,13 +7,15 @@
     tabId,
     src,
     desktopMode = false,
-  }: { tabId: string; src: string; desktopMode?: boolean } = $props();
+    canBack = $bindable(false),
+    canForward = $bindable(false),
+  }: { tabId: string; src: string; desktopMode?: boolean; canBack?: boolean; canForward?: boolean } = $props();
 
   let frame: HTMLIFrameElement | undefined = $state();
   let historyStack = $state<string[]>([]);
   let historyIndex = $state(-1);
-  let canBack = $state(false);
-  let canForward = $state(false);
+
+
 
   export function goBack() {
     if (historyIndex > 0) {
@@ -39,14 +41,14 @@
   $effect(() => {
     if (!src) return;
     tabs.setLoading(tabId, true);
+    canBack = historyIndex > 0;
+    canForward = historyIndex < historyStack.length - 1;
     if (historyIndex < 0 || historyStack[historyIndex] !== src) {
       const trimmed = historyStack.slice(0, historyIndex + 1);
       trimmed.push(src);
       historyStack = trimmed;
       historyIndex = trimmed.length - 1;
     }
-    canBack = historyIndex > 0;
-    canForward = historyIndex < historyStack.length - 1;
   });
 
   function onLoad() {

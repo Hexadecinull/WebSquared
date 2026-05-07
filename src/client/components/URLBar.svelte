@@ -7,12 +7,13 @@
     onNavigate,
   }: { url?: string; onNavigate: (url: string) => void } = $props();
 
-  let inputValue = $state(url ?? '');
+  let inputValue = $state('');
+
+  $effect(() => { inputValue = url ?? ''; });
   let focused = $state(false);
   let suggestions = $state<import('../stores/history').HistoryEntry[]>([]);
   let selectedIndex = $state(-1);
 
-  $effect(() => { inputValue = url; });
 
   function normalizeUrl(raw: string): string {
     const trimmed = raw.trim();

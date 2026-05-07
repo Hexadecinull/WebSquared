@@ -11,11 +11,14 @@
   import SettingsPanel from './components/SettingsPanel.svelte';
 
   let showSettings = $state(false);
-  let showMenu = $state(false);
   let swReady = $state(false);
 
   let frameRefs = $state<Record<string, ProxyFrame>>({});
   let frameLoading = $derived($activeTab?.loading ?? false);
+  let tabCanBack = $state<Record<string, boolean>>({});
+  let tabCanForward = $state<Record<string, boolean>>({});
+  let canBack = $derived($activeTab ? (tabCanBack[$activeTab.id] ?? false) : false);
+  let canForward = $derived($activeTab ? (tabCanForward[$activeTab.id] ?? false) : false);
 
   function getActiveFrame(): ProxyFrame | undefined {
     return $activeTab ? frameRefs[$activeTab.id] : undefined;
@@ -87,8 +90,8 @@
     </a>
 
     <NavButtons
-      canBack={false}
-      canForward={false}
+      canBack={canBack}
+      canForward={canForward}
       loading={frameLoading}
       bookmarked={isBookmarked}
       onBack={goBack}
@@ -140,6 +143,8 @@
             tabId={tab.id}
             src={tab.proxySrc}
             desktopMode={$settings.desktopMode}
+            bind:canBack={tabCanBack[tab.id]}
+            bind:canForward={tabCanForward[tab.id]}
           />
         {:else}
           <div class="splash">
