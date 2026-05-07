@@ -1,5 +1,5 @@
 import { load } from 'cheerio';
-import { toProxyUrl } from '../../shared/url.js';
+import { toProxyUrl, PREFIX } from '../../shared/url.js';
 import { rewriteCss } from './css.js';
 
 const TAG_ATTRS: Record<string, string[]> = {
@@ -27,10 +27,15 @@ const TAG_ATTRS: Record<string, string[]> = {
 const SKIP_PROTOCOLS = new Set(['data:', 'blob:', 'javascript:', 'mailto:', 'tel:', '#']);
 
 function shouldSkip(url: string): boolean {
+  if (url.startsWith(PREFIX)) return true;
   for (const proto of SKIP_PROTOCOLS) {
     if (url.startsWith(proto)) return true;
   }
   return false;
+}
+
+function upgradeUrl(url: string): string {
+  return url.startsWith('http://') ? url.replace('http://', 'https://') : url;
 }
 
 function rewriteSrcset(srcset: string, base: string): string {
@@ -39,7 +44,7 @@ function rewriteSrcset(srcset: string, base: string): string {
     .map((entry) => {
       const parts = entry.trim().split(/\s+/);
       if (!parts[0]) return entry;
-      parts[0] = shouldSkip(parts[0]) ? parts[0] : toProxyUrl(parts[0], base);
+      parts[0] = shouldSkip(parts[0]) ? parts[0] : toProxyUrl(upgradeUrl(parts[0]), base);
       return parts.join(' ');
     })
     .join(', ');
@@ -64,21 +69,26 @@ export function rewriteHtml(html: string, baseUrl: string): string {
   $('meta[http-equiv="Content-Security-Policy"]').remove();
   $('meta[http-equiv="content-security-policy"]').remove();
   $('meta[http-equiv="X-Frame-Options"]').remove();
+  $('meta[http-equiv="refresh"]').remove();
 
   $('base').remove();
 
   $('head').prepend(
     `<script>window.__W2_URL__="${resolvedBase}";window.__W2_PREFIX__="/w2/";</script>`,
   );
-  $('head').append('<script src="/w2-client.js" defer></script>');
+  $('head').append('<script src="/w2-client.js"></script>');
 
   for (const [tag, attrs] of Object.entries(TAG_ATTRS)) {
     $(tag).each((_, el) => {
       const element = $(el);
+      const target = element.attr('target');
+      if (target === '_top' || target === '_parent' || target === '_blank') {
+        element.attr('target', '_self');
+      }
       for (const attr of attrs) {
         const val = element.attr(attr);
         if (val && !shouldSkip(val)) {
-          element.attr(attr, toProxyUrl(val, resolvedBase));
+          element.attr(attr, toProxyUrl(upgradeUrl(val), resolvedBase));
         }
       }
     });
@@ -105,17 +115,6 @@ export function rewriteHtml(html: string, baseUrl: string): string {
     const content = element.html();
     if (content) {
       element.html(rewriteCss(content, resolvedBase));
-    }
-  });
-
-  $('meta[http-equiv="refresh"]').each((_, el) => {
-    const element = $(el);
-    const content = element.attr('content');
-    if (!content) return;
-    const match = content.match(/^(\d+)\s*;\s*url\s*=\s*(.+)$/i);
-    if (match) {
-      const refreshUrl = match[2].trim().replace(/^['"]|['"]$/g, '');
-      element.attr('content', `${match[1]};url=${toProxyUrl(refreshUrl, resolvedBase)}`);
     }
   });
 

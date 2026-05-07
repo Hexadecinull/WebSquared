@@ -33,6 +33,7 @@ function buildRequestHeaders(req: Request, targetUrl: string): Record<string, st
       (req.headers['user-agent'] as string) ??
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
     host: new URL(targetUrl).host,
+    origin: new URL(targetUrl).origin,
   };
 
   for (const name of FORWARDED_REQUEST_HEADERS) {
@@ -54,6 +55,8 @@ function buildRequestHeaders(req: Request, targetUrl: string): Record<string, st
 
   return headers;
 }
+
+const REDIRECT_LIMIT = 5;
 
 export async function handleProxy(req: Request, res: Response): Promise<void> {
   const encodedPart = req.path.slice(1);
@@ -79,23 +82,59 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
     return;
   }
 
+  if (parsedTarget.protocol === 'http:') {
+    parsedTarget.protocol = 'https:';
+    targetUrl = parsedTarget.href;
+  }
+
   const requestHeaders = buildRequestHeaders(req, targetUrl);
 
   let response: globalThis.Response;
-  try {
-    response = await fetch(targetUrl, {
-      method: req.method,
-      headers: requestHeaders,
-      redirect: 'follow',
-      body:
-        req.method !== 'GET' && req.method !== 'HEAD'
-          ? (req as unknown as { body: Buffer }).body
-          : undefined,
-    });
-  } catch (err) {
-    res.status(502).type('text').send(`Upstream fetch failed: ${(err as Error).message}`);
-    return;
+  let redirectCount = 0;
+  let currentUrl = targetUrl;
+
+  while (true) {
+    try {
+      response = await fetch(currentUrl, {
+        method: req.method,
+        headers: requestHeaders,
+        redirect: 'manual',
+        body:
+          req.method !== 'GET' && req.method !== 'HEAD'
+            ? (req as unknown as { body: Buffer }).body
+            : undefined,
+      });
+    } catch (err) {
+      res.status(502).type('text').send(`Upstream fetch failed: ${(err as Error).message}`);
+      return;
+    }
+
+    if (
+      (response.status === 301 ||
+        response.status === 302 ||
+        response.status === 303 ||
+        response.status === 307 ||
+        response.status === 308) &&
+      redirectCount < REDIRECT_LIMIT
+    ) {
+      const location = response.headers.get('location');
+      if (!location) break;
+      try {
+        const next = new URL(location, currentUrl);
+        if (next.protocol === 'http:') next.protocol = 'https:';
+        currentUrl = next.href;
+        redirectCount++;
+        requestHeaders['host'] = next.host;
+        requestHeaders['origin'] = next.origin;
+        continue;
+      } catch {
+        break;
+      }
+    }
+    break;
   }
+
+  const finalUrl = currentUrl;
 
   res.status(response.status);
 
@@ -104,7 +143,7 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
     if (BLOCKED_RESPONSE_HEADERS.has(lower)) continue;
 
     if (lower === 'location') {
-      res.setHeader('location', toProxyUrl(value, response.url));
+      res.setHeader('location', toProxyUrl(value, finalUrl));
       continue;
     }
 
@@ -129,7 +168,6 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
   res.setHeader('access-control-allow-credentials', 'true');
 
   const contentType = response.headers.get('content-type') ?? '';
-  const finalUrl = response.url;
 
   if (contentType.includes('text/html')) {
     const html = await response.text();
