@@ -1,12 +1,15 @@
 <script lang="ts">
-  import { settings } from '../stores/settings';
+  import { settings, isMobile } from '../stores/settings';
   import { history } from '../stores/history';
   import { bookmarks } from '../stores/bookmarks';
 
   let { onClose }: { onClose: () => void } = $props();
 
+  const mobile = isMobile();
+
   type Theme = 'dark' | 'light' | 'system';
-  type Engine = 'google' | 'bing' | 'duckduckgo' | 'brave';
+  type Engine = 'google' | 'bing' | 'duckduckgo' | 'brave' | 'ecosia';
+  type FontSize = 'small' | 'medium' | 'large';
 </script>
 
 <div class="overlay" onclick={onClose} role="presentation"></div>
@@ -30,6 +33,18 @@
         <option value="system">System</option>
       </select>
     </label>
+    <label>
+      Font size
+      <select value={$settings.fontSize} onchange={(e) => settings.set('fontSize', (e.currentTarget as HTMLSelectElement).value as FontSize)}>
+        <option value="small">Small</option>
+        <option value="medium">Medium</option>
+        <option value="large">Large</option>
+      </select>
+    </label>
+    <label class="toggle-row">
+      Smooth scrolling
+      <input type="checkbox" checked={$settings.smoothScrolling} onchange={(e) => settings.set('smoothScrolling', (e.currentTarget as HTMLInputElement).checked)} />
+    </label>
   </section>
 
   <section>
@@ -41,36 +56,50 @@
         <option value="bing">Bing</option>
         <option value="duckduckgo">DuckDuckGo</option>
         <option value="brave">Brave Search</option>
+        <option value="ecosia">Ecosia</option>
       </select>
     </label>
     <label class="toggle-row">
-      Desktop mode
-      <input
-        type="checkbox"
-        checked={$settings.desktopMode}
-        onchange={(e) => settings.set('desktopMode', (e.currentTarget as HTMLInputElement).checked)}
-      />
+      Open links in new tab
+      <input type="checkbox" checked={$settings.openLinksInNewTab} onchange={(e) => settings.set('openLinksInNewTab', (e.currentTarget as HTMLInputElement).checked)} />
     </label>
+    <label class="toggle-row">
+      Save browsing history
+      <input type="checkbox" checked={$settings.saveHistory} onchange={(e) => settings.set('saveHistory', (e.currentTarget as HTMLInputElement).checked)} />
+    </label>
+    <label class="toggle-row">
+      Block ads (experimental)
+      <input type="checkbox" checked={$settings.blockAds} onchange={(e) => settings.set('blockAds', (e.currentTarget as HTMLInputElement).checked)} />
+    </label>
+    {#if mobile}
+      <label class="toggle-row">
+        Desktop mode
+        <input type="checkbox" checked={$settings.desktopMode} onchange={(e) => settings.set('desktopMode', (e.currentTarget as HTMLInputElement).checked)} />
+      </label>
+    {/if}
   </section>
 
   <section>
     <h3>Data</h3>
-    <button class="danger-btn" onclick={() => { history.clear(); }}>Clear history</button>
-    <button class="danger-btn" onclick={() => { bookmarks.clear(); }}>Clear bookmarks</button>
+    <button class="danger-btn" onclick={() => history.clear()}>Clear history</button>
+    <button class="danger-btn" onclick={() => bookmarks.clear()}>Clear bookmarks</button>
     <button class="danger-btn" onclick={() => { history.clear(); bookmarks.clear(); settings.reset(); }}>Reset all data</button>
   </section>
 
   <section>
     <h3>About</h3>
     <p class="about-line">WebSquared v0.1.0 — GPL-3.0</p>
-    <p class="about-line"><a href="https://github.com/Hexadecinull/WebSquared" target="_blank" rel="noopener noreferrer">GitHub</a></p>
+    <p class="about-line">
+      Created by SSMG4 and contributors
+    </p>
+    <p class="about-line">
+      <a href="https://github.com/Hexadecinull/WebSquared" target="_blank" rel="noopener noreferrer">GitHub →</a>
+    </p>
   </section>
 </div>
 
 <style>
-  .overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200;
-  }
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; }
   .panel {
     position: fixed; top: 0; right: 0; bottom: 0; width: 320px;
     background: var(--surface-1); border-left: 1px solid var(--border);
@@ -81,6 +110,7 @@
   header {
     display: flex; align-items: center; justify-content: space-between;
     padding: 1rem; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    position: sticky; top: 0; background: var(--surface-1); z-index: 1;
   }
   h2 { font-size: 1rem; font-weight: 600; color: var(--text-1); }
   header button {
@@ -88,21 +118,21 @@
     width: 2rem; height: 2rem; border-radius: 6px;
     border: none; background: transparent; color: var(--text-2); cursor: pointer;
   }
-  header button:hover { background: var(--surface-2); }
+  header button:hover { background: var(--surface-2); color: var(--text-1); }
   header button svg { width: 1rem; height: 1rem; }
   section { padding: 1rem; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 0.75rem; }
-  h3 { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); margin-bottom: 0.25rem; }
+  h3 { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); margin-bottom: 0.125rem; }
   label {
     display: flex; align-items: center; justify-content: space-between;
-    font-size: 0.875rem; color: var(--text-1);
+    font-size: 0.875rem; color: var(--text-1); gap: 1rem;
   }
   .toggle-row { cursor: pointer; }
   select {
     background: var(--surface-2); border: 1px solid var(--border);
     color: var(--text-1); border-radius: 6px; padding: 0.25rem 0.5rem;
-    font-size: 0.8rem; font-family: inherit; cursor: pointer;
+    font-size: 0.8rem; font-family: inherit; cursor: pointer; flex-shrink: 0;
   }
-  input[type="checkbox"] { width: 1rem; height: 1rem; cursor: pointer; accent-color: var(--accent); }
+  input[type="checkbox"] { width: 1rem; height: 1rem; cursor: pointer; accent-color: var(--accent); flex-shrink: 0; }
   .danger-btn {
     width: 100%; padding: 0.5rem; border-radius: 6px;
     border: 1px solid #f85149; background: transparent;

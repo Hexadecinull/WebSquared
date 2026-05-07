@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { tabs, activeTab } from './stores/tabs';
   import { bookmarks } from './stores/bookmarks';
-  import { settings } from './stores/settings';
+  import { settings, FONT_SIZE_MAP } from './stores/settings';
   import URLBar from './components/URLBar.svelte';
   import NavButtons from './components/NavButtons.svelte';
   import TabBar from './components/TabBar.svelte';
@@ -15,23 +15,24 @@
 
   let frameRefs = $state<Record<string, ProxyFrame>>({});
   let frameLoading = $derived($activeTab?.loading ?? false);
-  let tabCanBack = $state<Record<string, boolean>>({});
-  let tabCanForward = $state<Record<string, boolean>>({});
-  let canBack = $derived($activeTab ? (tabCanBack[$activeTab.id] ?? false) : false);
-  let canForward = $derived($activeTab ? (tabCanForward[$activeTab.id] ?? false) : false);
+  let navState = $state<Record<string, { back: boolean; fwd: boolean }>>({});
+  let canBack = $derived($activeTab ? (navState[$activeTab.id]?.back ?? false) : false);
+  let canForward = $derived($activeTab ? (navState[$activeTab.id]?.fwd ?? false) : false);
 
   function getActiveFrame(): ProxyFrame | undefined {
     return $activeTab ? frameRefs[$activeTab.id] : undefined;
   }
 
-  function applyTheme(theme: string) {
+  function applyTheme(s: typeof $settings) {
     const root = document.documentElement;
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const isDark = theme === 'dark' || (theme === 'system' && prefersDark);
+    const isDark = s.theme === 'dark' || (s.theme === 'system' && prefersDark);
     root.setAttribute('data-theme', isDark ? 'dark' : 'light');
+    root.style.fontSize = FONT_SIZE_MAP[s.fontSize];
+    root.style.scrollBehavior = s.smoothScrolling ? 'smooth' : 'auto';
   }
 
-  $effect(() => { applyTheme($settings.theme); });
+  $effect(() => { applyTheme($settings); });
 
   async function registerSW() {
     if (!('serviceWorker' in navigator)) return;
@@ -143,8 +144,7 @@
             tabId={tab.id}
             src={tab.proxySrc}
             desktopMode={$settings.desktopMode}
-            bind:canBack={tabCanBack[tab.id]}
-            bind:canForward={tabCanForward[tab.id]}
+            onNavState={(back, fwd) => { navState[tab.id] = { back, fwd }; }}
           />
         {:else}
           <div class="splash">

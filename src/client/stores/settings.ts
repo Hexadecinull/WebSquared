@@ -3,8 +3,13 @@ import { writable } from 'svelte/store';
 export interface Settings {
   theme: 'dark' | 'light' | 'system';
   desktopMode: boolean;
-  searchEngine: 'google' | 'bing' | 'duckduckgo' | 'brave';
+  searchEngine: 'google' | 'bing' | 'duckduckgo' | 'brave' | 'ecosia';
   newTabPage: 'default' | 'blank';
+  fontSize: 'small' | 'medium' | 'large';
+  smoothScrolling: boolean;
+  blockAds: boolean;
+  saveHistory: boolean;
+  openLinksInNewTab: boolean;
 }
 
 const STORAGE_KEY = 'w2_settings';
@@ -14,6 +19,11 @@ const DEFAULTS: Settings = {
   desktopMode: false,
   searchEngine: 'google',
   newTabPage: 'default',
+  fontSize: 'medium',
+  smoothScrolling: true,
+  blockAds: false,
+  saveHistory: true,
+  openLinksInNewTab: false,
 };
 
 export const SEARCH_URLS: Record<Settings['searchEngine'], string> = {
@@ -21,13 +31,25 @@ export const SEARCH_URLS: Record<Settings['searchEngine'], string> = {
   bing: 'https://www.bing.com/search?q=',
   duckduckgo: 'https://duckduckgo.com/?q=',
   brave: 'https://search.brave.com/search?q=',
+  ecosia: 'https://www.ecosia.org/search?q=',
 };
+
+export const FONT_SIZE_MAP: Record<Settings['fontSize'], string> = {
+  small: '12px',
+  medium: '14px',
+  large: '16px',
+};
+
+export function isMobile(): boolean {
+  return /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(navigator.userAgent)
+    || window.innerWidth < 768;
+}
 
 function load(): Settings {
   try {
     return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') };
   } catch {
-    return DEFAULTS;
+    return { ...DEFAULTS };
   }
 }
 

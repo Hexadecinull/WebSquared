@@ -7,9 +7,8 @@
     tabId,
     src,
     desktopMode = false,
-    canBack = $bindable(false),
-    canForward = $bindable(false),
-  }: { tabId: string; src: string; desktopMode?: boolean; canBack?: boolean; canForward?: boolean } = $props();
+    onNavState,
+  }: { tabId: string; src: string; desktopMode?: boolean; onNavState?: (canBack: boolean, canForward: boolean) => void } = $props();
 
   let frame: HTMLIFrameElement | undefined = $state();
   let historyStack = $state<string[]>([]);
@@ -41,8 +40,7 @@
   $effect(() => {
     if (!src) return;
     tabs.setLoading(tabId, true);
-    canBack = historyIndex > 0;
-    canForward = historyIndex < historyStack.length - 1;
+    onNavState?.(historyIndex > 0, historyIndex < historyStack.length - 1);
     if (historyIndex < 0 || historyStack[historyIndex] !== src) {
       const trimmed = historyStack.slice(0, historyIndex + 1);
       trimmed.push(src);
