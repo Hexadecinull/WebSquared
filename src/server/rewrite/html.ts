@@ -1,6 +1,7 @@
 import { load } from 'cheerio';
 import { toProxyUrl, PREFIX } from '../../shared/url.js';
 import { rewriteCss } from './css.js';
+import { getInlineClientScript } from '../client-cache.js';
 
 const TAG_ATTRS: Record<string, string[]> = {
   a: ['href'],
@@ -53,11 +54,7 @@ function rewriteSrcset(srcset: string, base: string): string {
 function resolveBase(html: string, base: string): string {
   const match = html.match(/<base[^>]+href=["']?([^"'\s>]+)/i);
   if (match) {
-    try {
-      return new URL(match[1], base).href;
-    } catch {
-      return base;
-    }
+    try { return new URL(match[1], base).href; } catch { return base; }
   }
   return base;
 }
@@ -70,13 +67,16 @@ export function rewriteHtml(html: string, baseUrl: string): string {
   $('meta[http-equiv="content-security-policy"]').remove();
   $('meta[http-equiv="X-Frame-Options"]').remove();
   $('meta[http-equiv="refresh"]').remove();
-
   $('base').remove();
 
+  const inlined = getInlineClientScript();
+  const clientTag = inlined
+    ? `<script>${inlined}</script>`
+    : `<script src="/w2-client.js"></script>`;
+
   $('head').prepend(
-    `<script>window.__W2_URL__="${resolvedBase}";window.__W2_PREFIX__="/w2/";</script>`,
+    `<script>window.__W2_URL__="${resolvedBase}";window.__W2_PREFIX__="/w2/";</script>${clientTag}`,
   );
-  $('head').append('<script src="/w2-client.js"></script>');
 
   for (const [tag, attrs] of Object.entries(TAG_ATTRS)) {
     $(tag).each((_, el) => {
@@ -97,25 +97,19 @@ export function rewriteHtml(html: string, baseUrl: string): string {
   $('[srcset]').each((_, el) => {
     const element = $(el);
     const srcset = element.attr('srcset');
-    if (srcset) {
-      element.attr('srcset', rewriteSrcset(srcset, resolvedBase));
-    }
+    if (srcset) element.attr('srcset', rewriteSrcset(srcset, resolvedBase));
   });
 
   $('[style]').each((_, el) => {
     const element = $(el);
     const style = element.attr('style');
-    if (style) {
-      element.attr('style', rewriteCss(style, resolvedBase));
-    }
+    if (style) element.attr('style', rewriteCss(style, resolvedBase));
   });
 
   $('style').each((_, el) => {
     const element = $(el);
     const content = element.html();
-    if (content) {
-      element.html(rewriteCss(content, resolvedBase));
-    }
+    if (content) element.html(rewriteCss(content, resolvedBase));
   });
 
   return $.html();

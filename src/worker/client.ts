@@ -1,21 +1,17 @@
 import { toProxyUrl, fromProxyPath, PREFIX } from '../shared/url';
 
-const w = window as Window & typeof globalThis & {
-  __W2_URL__: string;
-  __W2_PREFIX__: string;
-  XMLHttpRequest: typeof XMLHttpRequest;
-  WebSocket: typeof WebSocket;
-  fetch: typeof fetch;
-};
+const realUrl: string = (window as unknown as Record<string, string>)['__W2_URL__'] ?? location.href;
+const proxyOrigin = location.origin;
 
-const realUrl: string = w.__W2_URL__ ?? location.href;
-const realOrigin = new URL(realUrl).origin;
+function resolveAgainstReal(url: string): string {
+  try { return new URL(url, realUrl).href; } catch { return url; }
+}
 
-function isExternal(url: string): boolean {
+function isProxiable(url: string): boolean {
   try {
     const parsed = new URL(url, realUrl);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
-    if (parsed.href.startsWith(location.origin + PREFIX)) return false;
+    if (parsed.href.startsWith(proxyOrigin + PREFIX)) return false;
     return true;
   } catch {
     return false;
@@ -23,28 +19,25 @@ function isExternal(url: string): boolean {
 }
 
 function maybeProxy(url: string): string {
-  if (!isExternal(url)) return url;
-  return toProxyUrl(url, realUrl);
+  const resolved = resolveAgainstReal(url);
+  if (!isProxiable(resolved)) return url;
+  return toProxyUrl(resolved, realUrl);
 }
 
 const _fetch = window.fetch.bind(window);
-w.fetch = function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  if (typeof input === 'string') {
-    return _fetch(maybeProxy(input), init);
-  }
-  if (input instanceof URL) {
-    return _fetch(new URL(maybeProxy(input.href), location.href), init);
-  }
+window.fetch = function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  if (typeof input === 'string') return _fetch(maybeProxy(input), init);
+  if (input instanceof URL) return _fetch(maybeProxy(input.href), init);
   const proxied = maybeProxy(input.url);
   return _fetch(proxied === input.url ? input : new Request(proxied, input), init);
 };
 
-const NativeXHR = w.XMLHttpRequest;
+const NativeXHR = window.XMLHttpRequest;
 class PatchedXHR extends NativeXHR {
   open(
     method: string,
     url: string | URL,
-    async: boolean = true,
+    async = true,
     user?: string | null,
     password?: string | null,
   ): void {
@@ -52,94 +45,62 @@ class PatchedXHR extends NativeXHR {
     super.open(method, maybeProxy(strUrl), async, user, password);
   }
 }
-w.XMLHttpRequest = PatchedXHR;
+(window as unknown as Record<string, unknown>)['XMLHttpRequest'] = PatchedXHR;
 
-const NativeWS = w.WebSocket;
+const NativeWS = window.WebSocket;
 class PatchedWebSocket extends NativeWS {
   constructor(url: string | URL, protocols?: string | string[]) {
-    const strUrl = typeof url === 'string' ? url : url.href;
-    super(strUrl, protocols);
+    super(typeof url === 'string' ? url : url.href, protocols);
   }
 }
-w.WebSocket = PatchedWebSocket;
+(window as unknown as Record<string, unknown>)['WebSocket'] = PatchedWebSocket;
 
 const _open = window.open.bind(window);
-window.open = function (
-  url?: string | URL,
-  target?: string,
-  features?: string,
-): WindowProxy | null {
+window.open = function (url?: string | URL, target?: string, features?: string): WindowProxy | null {
   if (!url) return _open(url, target, features);
-  const strUrl = typeof url === 'string' ? url : url.href;
-  return _open(maybeProxy(strUrl), target, features);
+  return _open(maybeProxy(typeof url === 'string' ? url : url.href), target, features);
 };
 
-const _historyPush = history.pushState.bind(history);
-history.pushState = function (
-  data: unknown,
-  unused: string,
-  url?: string | URL | null,
-): void {
-  if (url) {
-    const strUrl = typeof url === 'string' ? url : url.href;
-    _historyPush(data, unused, maybeProxy(strUrl));
-    return;
-  }
-  _historyPush(data, unused, url);
+const _push = history.pushState.bind(history);
+history.pushState = function (data: unknown, unused: string, url?: string | URL | null): void {
+  if (!url) { _push(data, unused, url); return; }
+  _push(data, unused, maybeProxy(typeof url === 'string' ? url : url.href));
 };
 
-const _historyReplace = history.replaceState.bind(history);
-history.replaceState = function (
-  data: unknown,
-  unused: string,
-  url?: string | URL | null,
-): void {
-  if (url) {
-    const strUrl = typeof url === 'string' ? url : url.href;
-    _historyReplace(data, unused, maybeProxy(strUrl));
-    return;
-  }
-  _historyReplace(data, unused, url);
+const _replace = history.replaceState.bind(history);
+history.replaceState = function (data: unknown, unused: string, url?: string | URL | null): void {
+  if (!url) { _replace(data, unused, url); return; }
+  _replace(data, unused, maybeProxy(typeof url === 'string' ? url : url.href));
 };
 
 try {
-  const realHrefDesc = {
-    get(): string {
-      const path = location.pathname;
-      if (path.startsWith(PREFIX)) {
-        try {
-          return fromProxyPath(path) + location.search + location.hash;
-        } catch {
-          return realUrl;
-        }
-      }
-      return location.href;
-    },
-    set(value: string): void {
-      location.href = maybeProxy(value);
-    },
-    configurable: true,
-  };
-
-  const realHostnameDesc = {
-    get(): string {
-      return new URL(realUrl).hostname;
-    },
-    configurable: true,
-  };
-
-  const realOriginDesc = {
-    get(): string {
-      return realOrigin;
-    },
-    configurable: true,
-  };
-
   Object.defineProperties(window, {
-    '__w2_realHref': realHrefDesc,
-    '__w2_realHostname': realHostnameDesc,
-    '__w2_realOrigin': realOriginDesc,
+    '__w2_realHref': {
+      get() {
+        const path = location.pathname;
+        if (path.startsWith(PREFIX)) {
+          try { return fromProxyPath(path) + location.search + location.hash; }
+          catch { return realUrl; }
+        }
+        return location.href;
+      },
+      set(value: string) { location.href = maybeProxy(value); },
+      configurable: true,
+    },
+    '__w2_realOrigin': {
+      get() { try { return new URL(realUrl).origin; } catch { return ''; } },
+      configurable: true,
+    },
   });
-} catch {
-  // location override is best-effort
-}
+} catch { /* best-effort */ }
+
+document.addEventListener('click', (e) => {
+  const a = (e.target as Element)?.closest('a');
+  if (!a) return;
+  const href = a.getAttribute('href');
+  if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+  const resolved = resolveAgainstReal(href);
+  if (!isProxiable(resolved)) return;
+  e.preventDefault();
+  location.href = toProxyUrl(resolved, realUrl);
+}, true);

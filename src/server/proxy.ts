@@ -27,13 +27,16 @@ const FORWARDED_REQUEST_HEADERS = [
   'pragma',
 ];
 
+const REDIRECT_LIMIT = 5;
+
 function buildRequestHeaders(req: Request, targetUrl: string): Record<string, string> {
+  const parsed = new URL(targetUrl);
   const headers: Record<string, string> = {
     'user-agent':
       (req.headers['user-agent'] as string) ??
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-    host: new URL(targetUrl).host,
-    origin: new URL(targetUrl).origin,
+    host: parsed.host,
+    origin: parsed.origin,
   };
 
   for (const name of FORWARDED_REQUEST_HEADERS) {
@@ -48,15 +51,29 @@ function buildRequestHeaders(req: Request, targetUrl: string): Record<string, st
       if (refUrl.pathname.startsWith(PREFIX)) {
         headers['referer'] = fromProxyPath(refUrl.pathname);
       }
-    } catch {
-      // ignore malformed referer
-    }
+    } catch { /* ignore */ }
   }
 
   return headers;
 }
 
-const REDIRECT_LIMIT = 5;
+function rewriteJs(js: string, baseUrl: string): string {
+  return js
+    .replace(
+      /(?<![.\w])fetch\s*\(\s*(['"`])(\/[^'"`\s]+)\1/g,
+      (_m, q, path) => {
+        try { return `fetch(${q}${toProxyUrl(new URL(path, baseUrl).href)}${q}`; }
+        catch { return _m; }
+      },
+    )
+    .replace(
+      /new\s+URL\s*\(\s*(['"`])(\/[^'"`\s]+)\1\s*,\s*(?:window\.location\.origin|location\.origin)\s*\)/g,
+      (_m, q, path) => {
+        try { return `new URL(${q}${toProxyUrl(new URL(path, baseUrl).href)}${q}, location.origin)`; }
+        catch { return _m; }
+      },
+    );
+}
 
 export async function handleProxy(req: Request, res: Response): Promise<void> {
   const encodedPart = req.path.slice(1);
@@ -87,8 +104,7 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
     targetUrl = parsedTarget.href;
   }
 
-  const requestHeaders = buildRequestHeaders(req, targetUrl);
-
+  let requestHeaders = buildRequestHeaders(req, targetUrl);
   let response: globalThis.Response;
   let redirectCount = 0;
   let currentUrl = targetUrl;
@@ -109,14 +125,8 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    if (
-      (response.status === 301 ||
-        response.status === 302 ||
-        response.status === 303 ||
-        response.status === 307 ||
-        response.status === 308) &&
-      redirectCount < REDIRECT_LIMIT
-    ) {
+    const isRedirect = [301, 302, 303, 307, 308].includes(response.status);
+    if (isRedirect && redirectCount < REDIRECT_LIMIT) {
       const location = response.headers.get('location');
       if (!location) break;
       try {
@@ -124,18 +134,14 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
         if (next.protocol === 'http:') next.protocol = 'https:';
         currentUrl = next.href;
         redirectCount++;
-        requestHeaders['host'] = next.host;
-        requestHeaders['origin'] = next.origin;
+        requestHeaders = buildRequestHeaders(req, currentUrl);
         continue;
-      } catch {
-        break;
-      }
+      } catch { break; }
     }
     break;
   }
 
   const finalUrl = currentUrl;
-
   res.status(response.status);
 
   for (const [key, value] of response.headers.entries()) {
@@ -184,6 +190,15 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
     res.removeHeader('content-encoding');
     res.removeHeader('content-length');
     res.send(rewriteCss(css, finalUrl));
+    return;
+  }
+
+  if (contentType.includes('javascript') || contentType.includes('ecmascript')) {
+    const js = await response.text();
+    res.setHeader('content-type', contentType);
+    res.removeHeader('content-encoding');
+    res.removeHeader('content-length');
+    res.send(rewriteJs(js, finalUrl));
     return;
   }
 
