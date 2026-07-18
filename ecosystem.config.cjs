@@ -4,6 +4,7 @@ module.exports = {
       name: 'websquared',
       script: 'dist-server/server/index.js',
       cwd: '/var/www/websquared',
+      exec_mode: 'fork',
       instances: 1,
       autorestart: true,
       watch: false,
@@ -14,14 +15,11 @@ module.exports = {
       },
     },
     {
-      // Listens for GitHub's push webhook (through the Cloudflare Tunnel)
-      // and runs git pull + build + restart automatically. Secrets are
-      // loaded from .env (gitignored, never touched by the deploy's own
-      // `git reset --hard`) via Node's built-in --env-file flag.
       name: 'websquared-deploy-webhook',
       script: 'scripts/deploy-webhook.mjs',
       cwd: '/var/www/websquared',
       node_args: '--env-file=.env',
+      exec_mode: 'fork',
       instances: 1,
       autorestart: true,
       watch: false,
