@@ -2,6 +2,7 @@
   import { settings, isMobile } from '../stores/settings';
   import { history } from '../stores/history';
   import { bookmarks } from '../stores/bookmarks';
+  import { onlineCount } from '../stores/presence';
 
   let { onClose }: { onClose: () => void } = $props();
 
@@ -22,6 +23,13 @@
       </svg>
     </button>
   </header>
+
+  <section class="online-section">
+    <div class="online-pill" title="People currently browsing through WebSquared">
+      <span class="online-dot"></span>
+      <span>{$onlineCount} {$onlineCount === 1 ? 'person' : 'people'} online</span>
+    </div>
+  </section>
 
   <section>
     <h3>Appearance</h3>
@@ -143,4 +151,36 @@
   .about-line { font-size: 0.8rem; color: var(--text-2); }
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
+
+  .online-section {
+    display: flex;
+    justify-content: center;
+    padding: 0.875rem 1rem;
+  }
+  .online-pill {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.9rem;
+    border-radius: 999px;
+    background: rgba(63, 185, 80, 0.12);
+    border: 1px solid rgba(63, 185, 80, 0.35);
+    color: #3fb950;
+    font-size: 0.8rem;
+    font-weight: 500;
+  }
+  .online-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: #3fb950;
+    box-shadow: 0 0 0 0 rgba(63, 185, 80, 0.6);
+    animation: pulse 1.8s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+  @keyframes pulse {
+    0% { transform: scale(0.85); box-shadow: 0 0 0 0 rgba(63, 185, 80, 0.5); }
+    50% { transform: scale(1.15); box-shadow: 0 0 0 4px rgba(63, 185, 80, 0); }
+    100% { transform: scale(0.85); box-shadow: 0 0 0 0 rgba(63, 185, 80, 0); }
+  }
 </style>

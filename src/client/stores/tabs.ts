@@ -9,6 +9,8 @@ export interface Tab {
   favicon: string;
   loading: boolean;
   private: boolean;
+  canBack: boolean;
+  canForward: boolean;
 }
 
 function makeId(): string {
@@ -24,7 +26,36 @@ function makeTab(url = '', proxySrc = '', priv = false): Tab {
     favicon: '',
     loading: false,
     private: priv,
+    canBack: false,
+    canForward: false,
   };
+}
+
+/**
+ * Replaces a single tab by id, but returns the SAME array reference untouched
+ * if the patch would be a no-op. This is load-bearing: Svelte's writable store
+ * only notifies subscribers when the new value differs by reference from the
+ * old one, so returning an identical reference here silently short-circuits
+ * the notification. Without this, any effect that unconditionally calls one
+ * of these setters on every run (even when the value hasn't changed) can
+ * cascade into components re-rendering, recreating inline prop closures,
+ * and re-triggering the same effect — an infinite loop.
+ */
+function patchTab(tabs: Tab[], id: string, patch: Partial<Tab>): Tab[] {
+  const idx = tabs.findIndex((t) => t.id === id);
+  if (idx === -1) return tabs;
+  const current = tabs[idx];
+  let changed = false;
+  for (const key in patch) {
+    if (current[key as keyof Tab] !== patch[key as keyof Tab]) {
+      changed = true;
+      break;
+    }
+  }
+  if (!changed) return tabs;
+  const next = tabs.slice();
+  next[idx] = { ...current, ...patch };
+  return next;
 }
 
 function createTabStore() {
@@ -77,15 +108,19 @@ function createTabStore() {
     },
 
     setTitle(id: string, title: string) {
-      update((tabs) => tabs.map((t) => (t.id === id ? { ...t, title } : t)));
+      update((tabs) => patchTab(tabs, id, { title }));
     },
 
     setFavicon(id: string, favicon: string) {
-      update((tabs) => tabs.map((t) => (t.id === id ? { ...t, favicon } : t)));
+      update((tabs) => patchTab(tabs, id, { favicon }));
     },
 
     setLoading(id: string, loading: boolean) {
-      update((tabs) => tabs.map((t) => (t.id === id ? { ...t, loading } : t)));
+      update((tabs) => patchTab(tabs, id, { loading }));
+    },
+
+    setNavState(id: string, canBack: boolean, canForward: boolean) {
+      update((tabs) => patchTab(tabs, id, { canBack, canForward }));
     },
 
     reset() {

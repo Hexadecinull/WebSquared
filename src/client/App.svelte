@@ -3,6 +3,7 @@
   import { tabs, activeTab } from './stores/tabs';
   import { bookmarks } from './stores/bookmarks';
   import { settings, FONT_SIZE_MAP } from './stores/settings';
+  import { connectPresence } from './stores/presence';
   import URLBar from './components/URLBar.svelte';
   import NavButtons from './components/NavButtons.svelte';
   import TabBar from './components/TabBar.svelte';
@@ -15,9 +16,8 @@
 
   let frameRefs = $state<Record<string, ProxyFrame>>({});
   let frameLoading = $derived($activeTab?.loading ?? false);
-  let navState = $state<Record<string, { back: boolean; fwd: boolean }>>({});
-  let canBack = $derived($activeTab ? (navState[$activeTab.id]?.back ?? false) : false);
-  let canForward = $derived($activeTab ? (navState[$activeTab.id]?.fwd ?? false) : false);
+  let canBack = $derived($activeTab?.canBack ?? false);
+  let canForward = $derived($activeTab?.canForward ?? false);
 
   function getActiveFrame(): ProxyFrame | undefined {
     return $activeTab ? frameRefs[$activeTab.id] : undefined;
@@ -43,7 +43,10 @@
     } catch { /* non-fatal */ }
   }
 
-  onMount(() => { registerSW(); });
+  onMount(() => {
+    registerSW();
+    connectPresence();
+  });
 
   function navigate(url: string, tabId?: string) {
     const id = tabId ?? $activeTab?.id;
@@ -113,9 +116,10 @@
         title="New private tab"
         aria-label="New private tab"
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
-          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M4 9c0-2.9 3.6-5.2 8-5.2s8 2.3 8 5.2v0.8H4V9z"/>
+          <ellipse cx="12" cy="9.6" rx="10" ry="1.3"/>
+          <path d="M2 11.2h20l-1.15 3.3a2.1 2.1 0 0 1-1.98 1.4h-1.85a2.1 2.1 0 0 1-1.98-1.45l-.5-1.55h-1.08l-.5 1.55a2.1 2.1 0 0 1-1.98 1.45H9.13a2.1 2.1 0 0 1-1.98-1.4L6 11.2z"/>
         </svg>
       </button>
       <button
@@ -144,7 +148,6 @@
             tabId={tab.id}
             src={tab.proxySrc}
             desktopMode={$settings.desktopMode}
-            onNavState={(back, fwd) => { navState[tab.id] = { back, fwd }; }}
           />
         {:else}
           <div class="splash">
@@ -158,8 +161,10 @@
             <p>Enter a URL or search above.</p>
             {#if tab.private}
               <p class="private-note">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M4 9c0-2.9 3.6-5.2 8-5.2s8 2.3 8 5.2v0.8H4V9z"/>
+                  <ellipse cx="12" cy="9.6" rx="10" ry="1.3"/>
+                  <path d="M2 11.2h20l-1.15 3.3a2.1 2.1 0 0 1-1.98 1.4h-1.85a2.1 2.1 0 0 1-1.98-1.45l-.5-1.55h-1.08l-.5 1.55a2.1 2.1 0 0 1-1.98 1.45H9.13a2.1 2.1 0 0 1-1.98-1.4L6 11.2z"/>
                 </svg>
                 Private tab — history won't be saved.
               </p>

@@ -28,12 +28,10 @@
       {/if}
       <span class="tab-title">{tab.title}</span>
       {#if tab.private}
-        <svg class="private-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="11" cy="13" r="4"/>
-          <path d="M11 9V7"/>
-          <path d="M6 7c0-2.5 10-2.5 10 0v1H6V7z" fill="currentColor" stroke="none" opacity="0.8"/>
-          <path d="M4 8h16" stroke-width="1.5"/>
-          <line x1="14.24" y1="16.24" x2="18" y2="20"/>
+        <svg class="private-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M4 9c0-2.9 3.6-5.2 8-5.2s8 2.3 8 5.2v0.8H4V9z"/>
+          <ellipse cx="12" cy="9.6" rx="10" ry="1.3"/>
+          <path d="M2 11.2h20l-1.15 3.3a2.1 2.1 0 0 1-1.98 1.4h-1.85a2.1 2.1 0 0 1-1.98-1.45l-.5-1.55h-1.08l-.5 1.55a2.1 2.1 0 0 1-1.98 1.45H9.13a2.1 2.1 0 0 1-1.98-1.4L6 11.2z"/>
         </svg>
       {/if}
       <span

@@ -34,6 +34,9 @@ jobs:
       - name: Build client
         run: npm run build:client
 
+      - name: Build workers
+        run: npm run build:workers
+
       - name: Build server
         run: npm run build:server
 

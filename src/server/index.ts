@@ -5,11 +5,13 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import { handleProxy } from './proxy.js';
+import { attachPresenceServer } from './presence.js';
 import { PREFIX } from '../shared/url.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const WISP_PATH = '/wisp/';
+const PRESENCE_PATH = '/w2-presence';
 const PORT = Number(process.env.PORT ?? 3000);
 const DIST_DIR = join(__dirname, '../../dist');
 
@@ -142,10 +144,17 @@ const server = createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 attachWispServer(wss);
 
+const presenceWss = new WebSocketServer({ noServer: true });
+attachPresenceServer(presenceWss);
+
 server.on('upgrade', (req, socket, head) => {
   if (req.url?.startsWith(WISP_PATH)) {
     wss.handleUpgrade(req, socket, head, (ws) => {
       wss.emit('connection', ws, req);
+    });
+  } else if (req.url?.startsWith(PRESENCE_PATH)) {
+    presenceWss.handleUpgrade(req, socket, head, (ws) => {
+      presenceWss.emit('connection', ws, req);
     });
   } else {
     socket.destroy();

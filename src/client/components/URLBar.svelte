@@ -15,6 +15,9 @@
   let selectedIndex = $state(-1);
 
 
+  let blockedMessage = $state('');
+  let blockedTimeout: ReturnType<typeof setTimeout> | undefined;
+
   function normalizeUrl(raw: string): string {
     const trimmed = raw.trim();
     if (!trimmed) return '';
@@ -23,9 +26,28 @@
     return SEARCH_URLS[$settings.searchEngine] + encodeURIComponent(trimmed);
   }
 
+  function isSelfReferential(target: string): boolean {
+    try {
+      return new URL(target).hostname.toLowerCase() === window.location.hostname.toLowerCase();
+    } catch {
+      return false;
+    }
+  }
+
   function navigate(raw?: string) {
     const target = normalizeUrl(raw ?? inputValue);
     if (!target) return;
+
+    if (isSelfReferential(target)) {
+      inputValue = url ?? '';
+      suggestions = [];
+      selectedIndex = -1;
+      blockedMessage = 'Caught you red handed, little prankster!';
+      clearTimeout(blockedTimeout);
+      blockedTimeout = setTimeout(() => { blockedMessage = ''; }, 3500);
+      return;
+    }
+
     inputValue = target;
     suggestions = [];
     selectedIndex = -1;
@@ -99,6 +121,9 @@
       </svg>
     </button>
   </div>
+  {#if blockedMessage}
+    <div class="blocked-toast">{blockedMessage}</div>
+  {/if}
   {#if suggestions.length > 0 && focused}
     <ul class="suggestions">
       {#each suggestions as s, i}
@@ -169,4 +194,15 @@
   .sfav-placeholder { width: 14px; height: 14px; flex-shrink: 0; }
   .surl { font-size: 0.8rem; color: var(--accent); flex-shrink: 0; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .stitle { font-size: 0.75rem; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .blocked-toast {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+    background: #3d1f1f; border: 1px solid #f85149; color: #ffb4ae;
+    border-radius: var(--radius); padding: 0.5rem 0.75rem;
+    font-size: 0.8rem; text-align: center; z-index: 100;
+    animation: toast-in 0.15s ease;
+  }
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 </style>

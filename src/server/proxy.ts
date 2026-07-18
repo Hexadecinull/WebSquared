@@ -1,7 +1,9 @@
 import type { Request, Response } from 'express';
+import { Readable } from 'node:stream';
 import { fromProxyPath, toProxyUrl, PREFIX } from '../shared/url.js';
 import { rewriteHtml } from './rewrite/html.js';
 import { rewriteCss } from './rewrite/css.js';
+import { renderSelfLoopPage } from './rewrite/blocked.js';
 
 const BLOCKED_RESPONSE_HEADERS = new Set([
   'content-security-policy',
@@ -17,6 +19,15 @@ const BLOCKED_RESPONSE_HEADERS = new Set([
   'access-control-allow-credentials',
   'access-control-allow-headers',
   'access-control-allow-methods',
+  // These describe the framing of the UPSTREAM response body. Once we've
+  // buffered/decoded that body (fetch() transparently decompresses gzip/br)
+  // or are about to stream the raw bytes ourselves, forwarding the
+  // original values causes the browser to expect a different byte count
+  // or encoding than what actually arrives — this is what makes pages hang
+  // "loading" forever or silently truncate.
+  'content-length',
+  'content-encoding',
+  'transfer-encoding',
 ]);
 
 const FORWARDED_REQUEST_HEADERS = [
@@ -57,24 +68,6 @@ function buildRequestHeaders(req: Request, targetUrl: string): Record<string, st
   return headers;
 }
 
-function rewriteJs(js: string, baseUrl: string): string {
-  return js
-    .replace(
-      /(?<![.\w])fetch\s*\(\s*(['"`])(\/[^'"`\s]+)\1/g,
-      (_m, q, path) => {
-        try { return `fetch(${q}${toProxyUrl(new URL(path, baseUrl).href)}${q}`; }
-        catch { return _m; }
-      },
-    )
-    .replace(
-      /new\s+URL\s*\(\s*(['"`])(\/[^'"`\s]+)\1\s*,\s*(?:window\.location\.origin|location\.origin)\s*\)/g,
-      (_m, q, path) => {
-        try { return `new URL(${q}${toProxyUrl(new URL(path, baseUrl).href)}${q}, location.origin)`; }
-        catch { return _m; }
-      },
-    );
-}
-
 export async function handleProxy(req: Request, res: Response): Promise<void> {
   const encodedPart = req.path.slice(1);
 
@@ -102,6 +95,16 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
   if (parsedTarget.protocol === 'http:') {
     parsedTarget.protocol = 'https:';
     targetUrl = parsedTarget.href;
+  }
+
+  // Self-loop guard: block proxying our own domain through itself. Without
+  // this, navigating (or being redirected) to the proxy's own address inside
+  // the iframe embeds a full nested copy of WebSquared, which can itself be
+  // navigated to itself again — a pointless, resource-wasting recursion.
+  const requestHost = (req.headers['host'] as string | undefined)?.toLowerCase();
+  if (requestHost && parsedTarget.host.toLowerCase() === requestHost) {
+    res.status(200).type('html').send(renderSelfLoopPage());
+    return;
   }
 
   let requestHeaders = buildRequestHeaders(req, targetUrl);
@@ -132,6 +135,14 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
       try {
         const next = new URL(location, currentUrl);
         if (next.protocol === 'http:') next.protocol = 'https:';
+
+        // Same guard applies mid-redirect-chain: a target site could bounce
+        // us back to our own domain just as easily as a typed-in URL could.
+        if (requestHost && next.host.toLowerCase() === requestHost) {
+          res.status(200).type('html').send(renderSelfLoopPage());
+          return;
+        }
+
         currentUrl = next.href;
         redirectCount++;
         requestHeaders = buildRequestHeaders(req, currentUrl);
@@ -154,13 +165,18 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
     }
 
     if (lower === 'set-cookie') {
+      // Strip Domain (cookies should scope to OUR domain, not the target's)
+      // and SameSite (the browser's notion of "site" here is our domain, so
+      // the original value no longer means what it meant on the real site).
+      // Deliberately NOT stripping Secure: our proxy is always served over
+      // HTTPS in production, and cookies using the __Secure- / __Host-
+      // prefixes are rejected by the browser outright if Secure is missing.
       const rewritten = value
         .split(', ')
         .map((cookie) =>
           cookie
             .replace(/;\s*domain=[^;]*/gi, '')
-            .replace(/;\s*samesite=[^;]*/gi, '')
-            .replace(/;\s*secure/gi, ''),
+            .replace(/;\s*samesite=[^;]*/gi, ''),
         )
         .join(', ');
       res.setHeader('set-cookie', rewritten);
@@ -178,8 +194,6 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
   if (contentType.includes('text/html')) {
     const html = await response.text();
     res.setHeader('content-type', 'text/html; charset=utf-8');
-    res.removeHeader('content-encoding');
-    res.removeHeader('content-length');
     res.send(rewriteHtml(html, finalUrl));
     return;
   }
@@ -187,21 +201,21 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
   if (contentType.includes('text/css')) {
     const css = await response.text();
     res.setHeader('content-type', contentType);
-    res.removeHeader('content-encoding');
-    res.removeHeader('content-length');
     res.send(rewriteCss(css, finalUrl));
     return;
   }
 
-  if (contentType.includes('javascript') || contentType.includes('ecmascript')) {
-    const js = await response.text();
-    res.setHeader('content-type', contentType);
-    res.removeHeader('content-encoding');
-    res.removeHeader('content-length');
-    res.send(rewriteJs(js, finalUrl));
+  // Everything else (JS, images, fonts, video, JSON, ...) is streamed through
+  // untouched rather than buffered fully into memory first. This matters a
+  // lot for large payloads (video, big JS bundles): the browser starts
+  // receiving bytes immediately instead of waiting for the whole upstream
+  // response to land on the server first, and the server doesn't have to
+  // hold multi-megabyte buffers in memory per concurrent request.
+  if (response.body) {
+    res.setHeader('content-type', contentType || 'application/octet-stream');
+    Readable.fromWeb(response.body as import('stream/web').ReadableStream<Uint8Array>).pipe(res);
     return;
   }
 
-  const buffer = await response.arrayBuffer();
-  res.send(Buffer.from(buffer));
+  res.end();
 }
