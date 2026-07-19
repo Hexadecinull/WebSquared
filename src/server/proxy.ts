@@ -28,6 +28,8 @@ const BLOCKED_RESPONSE_HEADERS = new Set([
   'content-length',
   'content-encoding',
   'transfer-encoding',
+  // Handled separately via getSetCookie() below, never via .entries().
+  'set-cookie',
 ]);
 
 const FORWARDED_REQUEST_HEADERS = [
@@ -39,6 +41,48 @@ const FORWARDED_REQUEST_HEADERS = [
 ];
 
 const REDIRECT_LIMIT = 5;
+
+// All proxied sites share this one real domain, so their cookies would
+// otherwise collide in the browser's single cookie jar (a "session" cookie
+// from google.com and one from bing.com would overwrite each other). Every
+// cookie we hand back to the browser gets its name prefixed with a short
+// tag derived from the target's origin, and stripped back off before we
+// forward it to that same origin on later requests — invisible to both the
+// browser's UI and the target site, but keeps origins fully isolated.
+const COOKIE_NS_PREFIX = 'w2c_';
+
+function hashOrigin(origin: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < origin.length; i++) {
+    hash ^= origin.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function namespaceSetCookie(setCookieValue: string, nsPrefix: string): string {
+  const eqIndex = setCookieValue.indexOf('=');
+  if (eqIndex === -1) return setCookieValue;
+  const name = setCookieValue.slice(0, eqIndex);
+  const rest = setCookieValue.slice(eqIndex);
+  return `${nsPrefix}${name}${rest}`;
+}
+
+function buildUpstreamCookieHeader(rawCookieHeader: string | undefined, nsPrefix: string): string | undefined {
+  if (!rawCookieHeader) return undefined;
+  const matched: string[] = [];
+  for (const pair of rawCookieHeader.split(';')) {
+    const trimmed = pair.trim();
+    if (!trimmed) continue;
+    const eqIndex = trimmed.indexOf('=');
+    if (eqIndex === -1) continue;
+    const name = trimmed.slice(0, eqIndex);
+    if (name.startsWith(nsPrefix)) {
+      matched.push(`${name.slice(nsPrefix.length)}${trimmed.slice(eqIndex)}`);
+    }
+  }
+  return matched.length > 0 ? matched.join('; ') : undefined;
+}
 
 function buildRequestHeaders(req: Request, targetUrl: string): Record<string, string> {
   const parsed = new URL(targetUrl);
@@ -54,6 +98,10 @@ function buildRequestHeaders(req: Request, targetUrl: string): Record<string, st
     const val = req.headers[name];
     if (val) headers[name] = val as string;
   }
+
+  const nsPrefix = `${COOKIE_NS_PREFIX}${hashOrigin(parsed.origin)}_`;
+  const upstreamCookie = buildUpstreamCookieHeader(req.headers['cookie'] as string | undefined, nsPrefix);
+  if (upstreamCookie) headers['cookie'] = upstreamCookie;
 
   const rawReferer = req.headers['referer'] as string | undefined;
   if (rawReferer) {
@@ -164,26 +212,31 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
       continue;
     }
 
-    if (lower === 'set-cookie') {
+    res.setHeader(key, value);
+  }
+
+  // getSetCookie() returns each Set-Cookie header as its own array entry —
+  // unlike iterating .entries(), which can coalesce multiple Set-Cookie
+  // headers into one comma-joined string. That's unsafe for cookies
+  // specifically, since a cookie's own Expires attribute can legitimately
+  // contain a comma (e.g. "Expires=Wed, 21 Oct 2026 07:28:00 GMT"), which a
+  // naive comma-split would mistake for a second cookie.
+  const setCookies = response.headers.getSetCookie?.() ?? [];
+  if (setCookies.length > 0) {
+    const nsPrefix = `${COOKIE_NS_PREFIX}${hashOrigin(new URL(finalUrl).origin)}_`;
+    const rewritten = setCookies.map((cookie) => {
       // Strip Domain (cookies should scope to OUR domain, not the target's)
       // and SameSite (the browser's notion of "site" here is our domain, so
       // the original value no longer means what it meant on the real site).
       // Deliberately NOT stripping Secure: our proxy is always served over
       // HTTPS in production, and cookies using the __Secure- / __Host-
       // prefixes are rejected by the browser outright if Secure is missing.
-      const rewritten = value
-        .split(', ')
-        .map((cookie) =>
-          cookie
-            .replace(/;\s*domain=[^;]*/gi, '')
-            .replace(/;\s*samesite=[^;]*/gi, ''),
-        )
-        .join(', ');
-      res.setHeader('set-cookie', rewritten);
-      continue;
-    }
-
-    res.setHeader(key, value);
+      const stripped = cookie
+        .replace(/;\s*domain=[^;]*/gi, '')
+        .replace(/;\s*samesite=[^;]*/gi, '');
+      return namespaceSetCookie(stripped, nsPrefix);
+    });
+    res.setHeader('set-cookie', rewritten);
   }
 
   res.setHeader('access-control-allow-origin', '*');

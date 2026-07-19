@@ -14,6 +14,14 @@
   let historyIndex = $state(-1);
   let loadTimeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
+  // Deliberately a PLAIN variable, not $state. The guard at the top of the
+  // effect below reads this before touching any reactive state, so re-runs
+  // of the effect for a `src` we've already processed exit immediately
+  // without writing to (or reading) historyStack/historyIndex at all. That
+  // makes the effect provably non-self-triggering: whatever caused it to
+  // re-run, if `src` hasn't actually changed, it's a guaranteed no-op.
+  let lastProcessedSrc = '';
+
   const LOAD_TIMEOUT_MS = 20_000;
 
   export function goBack() {
@@ -33,6 +41,7 @@
   export function refresh() {
     if (frame) {
       tabs.setLoading(tabId, true);
+      armLoadTimeout();
       frame.src = frame.src;
     }
   }
@@ -44,23 +53,18 @@
     }, LOAD_TIMEOUT_MS);
   }
 
-  // This effect must only mutate state (historyStack/historyIndex/loading) when
-  // `src` genuinely represents a new navigation. Writing to tab state on every
-  // run — even when nothing changed — causes the tabs store to notify
-  // subscribers, which can cascade back into re-triggering this same effect.
-  // The tabs store now dedupes no-op writes as a second line of defense, but
-  // this guard keeps the effect itself doing the minimum necessary work.
   $effect(() => {
-    if (!src) return;
-    const isNewNav = historyIndex < 0 || historyStack[historyIndex] !== src;
-    if (isNewNav) {
-      tabs.setLoading(tabId, true);
-      armLoadTimeout();
-      const trimmed = historyStack.slice(0, historyIndex + 1);
-      trimmed.push(src);
-      historyStack = trimmed;
-      historyIndex = trimmed.length - 1;
-    }
+    if (!src || src === lastProcessedSrc) return;
+    lastProcessedSrc = src;
+
+    tabs.setLoading(tabId, true);
+    armLoadTimeout();
+
+    const trimmed = historyStack.slice(0, historyIndex + 1);
+    trimmed.push(src);
+    historyStack = trimmed;
+    historyIndex = trimmed.length - 1;
+
     tabs.setNavState(tabId, historyIndex > 0, historyIndex < historyStack.length - 1);
   });
 
