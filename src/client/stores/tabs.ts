@@ -13,6 +13,8 @@ export interface Tab {
   canForward: boolean;
 }
 
+const STORAGE_KEY = 'w2_tabs';
+
 function makeId(): string {
   return Math.random().toString(36).slice(2, 9);
 }
@@ -31,20 +33,30 @@ function makeTab(url = '', proxySrc = '', priv = false): Tab {
   };
 }
 
-/**
- * Replaces a single tab by id, but returns the SAME array reference untouched
- * if the patch would be a no-op. This is load-bearing: Svelte's writable store
- * only notifies subscribers when the new value differs by reference from the
- * old one, so returning an identical reference here silently short-circuits
- * the notification. Without this, any effect that unconditionally calls one
- * of these setters on every run (even when the value hasn't changed) can
- * cascade into components re-rendering, recreating inline prop closures,
- * and re-triggering the same effect — an infinite loop.
- */
-function patchTab(tabs: Tab[], id: string, patch: Partial<Tab>): Tab[] {
-  const idx = tabs.findIndex((t) => t.id === id);
-  if (idx === -1) return tabs;
-  const current = tabs[idx];
+function loadPersistedTabs(): Tab[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [makeTab()];
+    const parsed = JSON.parse(raw) as Tab[];
+    if (!Array.isArray(parsed) || parsed.length === 0) return [makeTab()];
+    return parsed.map((t) => ({ ...t, loading: false, canBack: false, canForward: false }));
+  } catch {
+    return [makeTab()];
+  }
+}
+
+function persistTabs(tabList: Tab[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(tabList.filter((t) => !t.private)));
+  } catch { /* ignore quota errors */ }
+}
+
+// Returns the same reference on a no-op patch so Svelte's store skips
+// notifying subscribers, preventing needless re-renders.
+function patchTab(tabList: Tab[], id: string, patch: Partial<Tab>): Tab[] {
+  const idx = tabList.findIndex((t) => t.id === id);
+  if (idx === -1) return tabList;
+  const current = tabList[idx];
   let changed = false;
   for (const key in patch) {
     if (current[key as keyof Tab] !== patch[key as keyof Tab]) {
@@ -52,18 +64,19 @@ function patchTab(tabs: Tab[], id: string, patch: Partial<Tab>): Tab[] {
       break;
     }
   }
-  if (!changed) return tabs;
-  const next = tabs.slice();
+  if (!changed) return tabList;
+  const next = tabList.slice();
   next[idx] = { ...current, ...patch };
   return next;
 }
 
 function createTabStore() {
-  const { subscribe, update, set } = writable<Tab[]>([makeTab()]);
+  const { subscribe, update, set } = writable<Tab[]>(loadPersistedTabs());
   const activeId = writable<string>('');
 
-  subscribe((tabs) => {
-    activeId.update((id) => (tabs.find((t) => t.id === id) ? id : tabs[0]?.id ?? ''));
+  subscribe((tabList) => {
+    activeId.update((id) => (tabList.find((t) => t.id === id) ? id : tabList[0]?.id ?? ''));
+    persistTabs(tabList);
   });
 
   return {
@@ -73,15 +86,15 @@ function createTabStore() {
     openTab(url = '', priv = false) {
       const proxySrc = url ? toProxyUrl(url) : '';
       const tab = makeTab(url, proxySrc, priv);
-      update((tabs) => [...tabs, tab]);
+      update((tabList) => [...tabList, tab]);
       activeId.set(tab.id);
       return tab.id;
     },
 
     closeTab(id: string) {
-      update((tabs) => {
-        const idx = tabs.findIndex((t) => t.id === id);
-        const next = tabs.filter((t) => t.id !== id);
+      update((tabList) => {
+        const idx = tabList.findIndex((t) => t.id === id);
+        const next = tabList.filter((t) => t.id !== id);
         if (next.length === 0) next.push(makeTab());
         activeId.update((current) => {
           if (current !== id) return current;
@@ -97,8 +110,8 @@ function createTabStore() {
 
     navigate(id: string, url: string) {
       const proxySrc = toProxyUrl(url);
-      update((tabs) =>
-        tabs.map((t) => {
+      update((tabList) =>
+        tabList.map((t) => {
           if (t.id !== id) return t;
           let hostname = url;
           try { hostname = new URL(url).hostname; } catch { /* keep raw */ }
@@ -108,19 +121,19 @@ function createTabStore() {
     },
 
     setTitle(id: string, title: string) {
-      update((tabs) => patchTab(tabs, id, { title }));
+      update((tabList) => patchTab(tabList, id, { title }));
     },
 
     setFavicon(id: string, favicon: string) {
-      update((tabs) => patchTab(tabs, id, { favicon }));
+      update((tabList) => patchTab(tabList, id, { favicon }));
     },
 
     setLoading(id: string, loading: boolean) {
-      update((tabs) => patchTab(tabs, id, { loading }));
+      update((tabList) => patchTab(tabList, id, { loading }));
     },
 
     setNavState(id: string, canBack: boolean, canForward: boolean) {
-      update((tabs) => patchTab(tabs, id, { canBack, canForward }));
+      update((tabList) => patchTab(tabList, id, { canBack, canForward }));
     },
 
     reset() {

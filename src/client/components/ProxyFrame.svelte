@@ -14,12 +14,8 @@
   let historyIndex = $state(-1);
   let loadTimeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
-  // Deliberately a PLAIN variable, not $state. The guard at the top of the
-  // effect below reads this before touching any reactive state, so re-runs
-  // of the effect for a `src` we've already processed exit immediately
-  // without writing to (or reading) historyStack/historyIndex at all. That
-  // makes the effect provably non-self-triggering: whatever caused it to
-  // re-run, if `src` hasn't actually changed, it's a guaranteed no-op.
+  // Plain variable, not $state — guards the effect below against re-running
+  // for a `src` it's already processed, regardless of what triggered it.
   let lastProcessedSrc = '';
 
   const LOAD_TIMEOUT_MS = 20_000;
@@ -44,6 +40,10 @@
       armLoadTimeout();
       frame.src = frame.src;
     }
+  }
+
+  export function getIframe(): HTMLIFrameElement | undefined {
+    return frame;
   }
 
   function armLoadTimeout() {

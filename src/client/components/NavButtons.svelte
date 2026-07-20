@@ -60,5 +60,11 @@
   button:hover:not(:disabled) { background: var(--surface-2); color: var(--text-1); }
   button:disabled { opacity: 0.3; cursor: default; }
   button.bookmarked { color: var(--accent); }
+  button.bookmarked svg { animation: bookmark-pop 0.3s ease; }
+  @keyframes bookmark-pop {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.35); }
+    100% { transform: scale(1); }
+  }
   button svg { width: 1rem; height: 1rem; }
 </style>

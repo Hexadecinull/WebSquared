@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fly } from 'svelte/transition';
   import { history } from '../stores/history';
   import { settings, SEARCH_URLS } from '../stores/settings';
 
@@ -122,11 +123,11 @@
     </button>
   </div>
   {#if blockedMessage}
-    <div class="blocked-toast">{blockedMessage}</div>
+    <div class="blocked-toast" transition:fly={{ y: -6, duration: 150 }}>{blockedMessage}</div>
   {/if}
   {#if suggestions.length > 0 && focused}
-    <ul class="suggestions">
-      {#each suggestions as s, i}
+    <ul class="suggestions" transition:fly={{ y: -6, duration: 150 }}>
+      {#each suggestions as s, i (s.url)}
         <li class:selected={i === selectedIndex}>
           <button onmousedown={() => pickSuggestion(s.url)}>
             {#if s.favicon}
@@ -199,10 +200,5 @@
     background: #3d1f1f; border: 1px solid #f85149; color: #ffb4ae;
     border-radius: var(--radius); padding: 0.5rem 0.75rem;
     font-size: 0.8rem; text-align: center; z-index: 100;
-    animation: toast-in 0.15s ease;
-  }
-  @keyframes toast-in {
-    from { opacity: 0; transform: translateY(-4px); }
-    to { opacity: 1; transform: translateY(0); }
   }
 </style>

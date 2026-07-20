@@ -1,13 +1,15 @@
 <script lang="ts">
+  import { slide, scale } from 'svelte/transition';
+  import { flip } from 'svelte/animate';
   import { bookmarks } from '../stores/bookmarks';
 
   let { onNavigate }: { onNavigate: (url: string) => void } = $props();
 </script>
 
 {#if $bookmarks.length > 0}
-  <div class="bbar">
+  <div class="bbar" transition:slide={{ duration: 160 }}>
     {#each $bookmarks as b (b.id)}
-      <button onclick={() => onNavigate(b.url)} title={b.url}>
+      <button onclick={() => onNavigate(b.url)} title={b.url} transition:scale={{ duration: 140, start: 0.85 }} animate:flip={{ duration: 140 }}>
         {#if b.favicon}
           <img src={b.favicon} alt="" width="12" height="12" />
         {/if}

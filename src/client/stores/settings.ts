@@ -10,6 +10,7 @@ export interface Settings {
   blockAds: boolean;
   saveHistory: boolean;
   openLinksInNewTab: boolean;
+  devToolsEnabled: boolean;
 }
 
 const STORAGE_KEY = 'w2_settings';
@@ -24,6 +25,7 @@ const DEFAULTS: Settings = {
   blockAds: false,
   saveHistory: true,
   openLinksInNewTab: false,
+  devToolsEnabled: false,
 };
 
 export const SEARCH_URLS: Record<Settings['searchEngine'], string> = {

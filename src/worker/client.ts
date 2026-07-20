@@ -24,16 +24,58 @@ function maybeProxy(url: string): string {
   return toProxyUrl(resolved, realUrl);
 }
 
+interface DevtoolsConsoleEntry { type: string; args: string[]; time: number }
+interface DevtoolsNetworkEntry { method: string; url: string; status: number | null; time: number; duration: number | null }
+
+const devtoolsLog = {
+  console: [] as DevtoolsConsoleEntry[],
+  network: [] as DevtoolsNetworkEntry[],
+};
+(window as unknown as Record<string, unknown>)['__w2_devtools'] = devtoolsLog;
+
+const MAX_LOG_ENTRIES = 300;
+
+function stringifyArg(a: unknown): string {
+  if (typeof a === 'string') return a;
+  try { return JSON.stringify(a); } catch { return String(a); }
+}
+
+for (const method of ['log', 'warn', 'error', 'info'] as const) {
+  const native = console[method].bind(console);
+  console[method] = (...args: unknown[]) => {
+    devtoolsLog.console.push({ type: method, args: args.map(stringifyArg), time: Date.now() });
+    if (devtoolsLog.console.length > MAX_LOG_ENTRIES) devtoolsLog.console.shift();
+    native(...args);
+  };
+}
+
+function logNetwork(method: string, url: string, status: number | null, duration: number | null) {
+  devtoolsLog.network.push({ method, url, status, time: Date.now(), duration });
+  if (devtoolsLog.network.length > MAX_LOG_ENTRIES) devtoolsLog.network.shift();
+}
+
 const _fetch = window.fetch.bind(window);
 window.fetch = function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  if (typeof input === 'string') return _fetch(maybeProxy(input), init);
-  if (input instanceof URL) return _fetch(maybeProxy(input.href), init);
-  const proxied = maybeProxy(input.url);
-  return _fetch(proxied === input.url ? input : new Request(proxied, input), init);
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+  const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+  const started = Date.now();
+  const proxied = maybeProxy(url);
+  const target =
+    typeof input === 'string' ? proxied
+    : input instanceof URL ? proxied
+    : proxied === input.url ? input : new Request(proxied, input);
+  return _fetch(target as RequestInfo, init).then(
+    (res) => { logNetwork(method, url, res.status, Date.now() - started); return res; },
+    (err) => { logNetwork(method, url, null, Date.now() - started); throw err; },
+  );
 };
 
 const NativeXHR = window.XMLHttpRequest;
 class PatchedXHR extends NativeXHR {
+  private _w2Method = 'GET';
+  private _w2Url = '';
+  private _w2Start = 0;
+
   open(
     method: string,
     url: string | URL,
@@ -42,7 +84,17 @@ class PatchedXHR extends NativeXHR {
     password?: string | null,
   ): void {
     const strUrl = typeof url === 'string' ? url : url.href;
+    this._w2Method = method;
+    this._w2Url = strUrl;
     super.open(method, maybeProxy(strUrl), async, user, password);
+  }
+
+  send(body?: Document | XMLHttpRequestBodyInit | null): void {
+    this._w2Start = Date.now();
+    this.addEventListener('loadend', () => {
+      logNetwork(this._w2Method, this._w2Url, this.status || null, Date.now() - this._w2Start);
+    });
+    super.send(body);
   }
 }
 (window as unknown as Record<string, unknown>)['XMLHttpRequest'] = PatchedXHR;
@@ -93,6 +145,42 @@ try {
     },
   });
 } catch { /* best-effort */ }
+
+// Rewrites src/href set programmatically after page load, not just what
+// was present in the server-rendered HTML.
+function patchUrlProperty(ctor: { prototype: object } | undefined, prop: string) {
+  if (!ctor) return;
+  const descriptor = Object.getOwnPropertyDescriptor(ctor.prototype, prop);
+  if (!descriptor?.get || !descriptor?.set) return;
+  Object.defineProperty(ctor.prototype, prop, {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get(this: unknown) { return descriptor.get!.call(this); },
+    set(this: unknown, value: string) { descriptor.set!.call(this, maybeProxy(String(value))); },
+  });
+}
+
+patchUrlProperty(window.HTMLImageElement, 'src');
+patchUrlProperty(window.HTMLScriptElement, 'src');
+patchUrlProperty(window.HTMLLinkElement, 'href');
+patchUrlProperty(window.HTMLIFrameElement, 'src');
+
+const URL_ATTR_TAGS: Record<string, string> = {
+  IMG: 'src',
+  SCRIPT: 'src',
+  LINK: 'href',
+  IFRAME: 'src',
+};
+
+const _setAttribute = Element.prototype.setAttribute;
+Element.prototype.setAttribute = function (name: string, value: string): void {
+  const expected = URL_ATTR_TAGS[this.tagName];
+  if (expected && expected === name.toLowerCase()) {
+    _setAttribute.call(this, name, maybeProxy(value));
+    return;
+  }
+  _setAttribute.call(this, name, value);
+};
 
 document.addEventListener('click', (e) => {
   const a = (e.target as Element)?.closest('a');

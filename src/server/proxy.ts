@@ -19,36 +19,50 @@ const BLOCKED_RESPONSE_HEADERS = new Set([
   'access-control-allow-credentials',
   'access-control-allow-headers',
   'access-control-allow-methods',
-  // These describe the framing of the UPSTREAM response body. Once we've
-  // buffered/decoded that body (fetch() transparently decompresses gzip/br)
-  // or are about to stream the raw bytes ourselves, forwarding the
-  // original values causes the browser to expect a different byte count
-  // or encoding than what actually arrives — this is what makes pages hang
-  // "loading" forever or silently truncate.
   'content-length',
   'content-encoding',
   'transfer-encoding',
-  // Handled separately via getSetCookie() below, never via .entries().
   'set-cookie',
 ]);
 
-const FORWARDED_REQUEST_HEADERS = [
-  'accept',
-  'accept-language',
-  'accept-encoding',
-  'cache-control',
-  'pragma',
-];
+// Forwarded by blocklist, not allowlist: sites rely on custom headers
+// (RSC routing, CSRF tokens, range requests, sec-fetch-*, etc). This list
+// excludes hop-by-hop headers, ones we compute ourselves, and reverse-proxy
+// metadata that would otherwise leak the visitor's real IP.
+const REQUEST_HEADER_BLOCKLIST = new Set([
+  'host',
+  'connection',
+  'content-length',
+  'cookie',
+  'referer',
+  'origin',
+  'keep-alive',
+  'proxy-authenticate',
+  'proxy-authorization',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade',
+  'x-forwarded-for',
+  'x-forwarded-host',
+  'x-forwarded-proto',
+  'x-real-ip',
+  'cf-connecting-ip',
+  'cf-ipcountry',
+  'cf-ray',
+  'cf-visitor',
+  'cf-worker',
+  'cdn-loop',
+  'x-request-id',
+]);
+
+const DEFAULT_USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 const REDIRECT_LIMIT = 5;
 
-// All proxied sites share this one real domain, so their cookies would
-// otherwise collide in the browser's single cookie jar (a "session" cookie
-// from google.com and one from bing.com would overwrite each other). Every
-// cookie we hand back to the browser gets its name prefixed with a short
-// tag derived from the target's origin, and stripped back off before we
-// forward it to that same origin on later requests — invisible to both the
-// browser's UI and the target site, but keeps origins fully isolated.
+// Cookies get namespaced per target origin so different proxied sites
+// don't collide in the browser's one shared cookie jar.
 const COOKIE_NS_PREFIX = 'w2c_';
 
 function hashOrigin(origin: string): string {
@@ -63,9 +77,7 @@ function hashOrigin(origin: string): string {
 function namespaceSetCookie(setCookieValue: string, nsPrefix: string): string {
   const eqIndex = setCookieValue.indexOf('=');
   if (eqIndex === -1) return setCookieValue;
-  const name = setCookieValue.slice(0, eqIndex);
-  const rest = setCookieValue.slice(eqIndex);
-  return `${nsPrefix}${name}${rest}`;
+  return `${nsPrefix}${setCookieValue.slice(0, eqIndex)}${setCookieValue.slice(eqIndex)}`;
 }
 
 function buildUpstreamCookieHeader(rawCookieHeader: string | undefined, nsPrefix: string): string | undefined {
@@ -86,18 +98,18 @@ function buildUpstreamCookieHeader(rawCookieHeader: string | undefined, nsPrefix
 
 function buildRequestHeaders(req: Request, targetUrl: string): Record<string, string> {
   const parsed = new URL(targetUrl);
-  const headers: Record<string, string> = {
-    'user-agent':
-      (req.headers['user-agent'] as string) ??
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-    host: parsed.host,
-    origin: parsed.origin,
-  };
+  const headers: Record<string, string> = {};
 
-  for (const name of FORWARDED_REQUEST_HEADERS) {
-    const val = req.headers[name];
-    if (val) headers[name] = val as string;
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (!value) continue;
+    const lower = key.toLowerCase();
+    if (REQUEST_HEADER_BLOCKLIST.has(lower)) continue;
+    headers[lower] = Array.isArray(value) ? value.join(', ') : value;
   }
+
+  headers['host'] = parsed.host;
+  headers['origin'] = parsed.origin;
+  if (!headers['user-agent']) headers['user-agent'] = DEFAULT_USER_AGENT;
 
   const nsPrefix = `${COOKIE_NS_PREFIX}${hashOrigin(parsed.origin)}_`;
   const upstreamCookie = buildUpstreamCookieHeader(req.headers['cookie'] as string | undefined, nsPrefix);
@@ -145,10 +157,6 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
     targetUrl = parsedTarget.href;
   }
 
-  // Self-loop guard: block proxying our own domain through itself. Without
-  // this, navigating (or being redirected) to the proxy's own address inside
-  // the iframe embeds a full nested copy of WebSquared, which can itself be
-  // navigated to itself again — a pointless, resource-wasting recursion.
   const requestHost = (req.headers['host'] as string | undefined)?.toLowerCase();
   if (requestHost && parsedTarget.host.toLowerCase() === requestHost) {
     res.status(200).type('html').send(renderSelfLoopPage());
@@ -184,8 +192,6 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
         const next = new URL(location, currentUrl);
         if (next.protocol === 'http:') next.protocol = 'https:';
 
-        // Same guard applies mid-redirect-chain: a target site could bounce
-        // us back to our own domain just as easily as a typed-in URL could.
         if (requestHost && next.host.toLowerCase() === requestHost) {
           res.status(200).type('html').send(renderSelfLoopPage());
           return;
@@ -215,22 +221,10 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
     res.setHeader(key, value);
   }
 
-  // getSetCookie() returns each Set-Cookie header as its own array entry —
-  // unlike iterating .entries(), which can coalesce multiple Set-Cookie
-  // headers into one comma-joined string. That's unsafe for cookies
-  // specifically, since a cookie's own Expires attribute can legitimately
-  // contain a comma (e.g. "Expires=Wed, 21 Oct 2026 07:28:00 GMT"), which a
-  // naive comma-split would mistake for a second cookie.
   const setCookies = response.headers.getSetCookie?.() ?? [];
   if (setCookies.length > 0) {
     const nsPrefix = `${COOKIE_NS_PREFIX}${hashOrigin(new URL(finalUrl).origin)}_`;
     const rewritten = setCookies.map((cookie) => {
-      // Strip Domain (cookies should scope to OUR domain, not the target's)
-      // and SameSite (the browser's notion of "site" here is our domain, so
-      // the original value no longer means what it meant on the real site).
-      // Deliberately NOT stripping Secure: our proxy is always served over
-      // HTTPS in production, and cookies using the __Secure- / __Host-
-      // prefixes are rejected by the browser outright if Secure is missing.
       const stripped = cookie
         .replace(/;\s*domain=[^;]*/gi, '')
         .replace(/;\s*samesite=[^;]*/gi, '');
@@ -258,12 +252,6 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // Everything else (JS, images, fonts, video, JSON, ...) is streamed through
-  // untouched rather than buffered fully into memory first. This matters a
-  // lot for large payloads (video, big JS bundles): the browser starts
-  // receiving bytes immediately instead of waiting for the whole upstream
-  // response to land on the server first, and the server doesn't have to
-  // hold multi-megabyte buffers in memory per concurrent request.
   if (response.body) {
     res.setHeader('content-type', contentType || 'application/octet-stream');
     Readable.fromWeb(response.body as import('stream/web').ReadableStream<Uint8Array>).pipe(res);

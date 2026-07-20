@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { scale } from 'svelte/transition';
+  import { flip } from 'svelte/animate';
   import { tabs, activeTab } from '../stores/tabs';
 
   let { onNewTab, onCloseTab }: { onNewTab: () => void; onCloseTab: (id: string) => void } = $props();
@@ -16,6 +18,8 @@
       tabindex="0"
       aria-selected={tab.id === $activeTab?.id}
       title={tab.url || 'New Tab'}
+      transition:scale={{ duration: 160, start: 0.85 }}
+      animate:flip={{ duration: 160 }}
     >
       {#if tab.loading}
         <span class="tab-spinner"></span>

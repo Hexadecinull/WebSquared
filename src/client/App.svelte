@@ -10,6 +10,7 @@
   import ProxyFrame from './components/ProxyFrame.svelte';
   import BookmarksBar from './components/BookmarksBar.svelte';
   import SettingsPanel from './components/SettingsPanel.svelte';
+  import DevToolsPanel from './components/DevToolsPanel.svelte';
 
   let showSettings = $state(false);
   let swReady = $state(false);
@@ -21,6 +22,10 @@
 
   function getActiveFrame(): ProxyFrame | undefined {
     return $activeTab ? frameRefs[$activeTab.id] : undefined;
+  }
+
+  function getActiveIframe(): HTMLIFrameElement | undefined {
+    return getActiveFrame()?.getIframe();
   }
 
   function applyTheme(s: typeof $settings) {
@@ -77,7 +82,9 @@
     }
   }
 
-  let isBookmarked = $derived($activeTab ? bookmarks.isBookmarked($activeTab.url) : false);
+  let isBookmarked = $derived(
+    $activeTab ? $bookmarks.some((b) => b.url === $activeTab.url) : false,
+  );
 </script>
 
 <div class="shell">
@@ -174,6 +181,10 @@
 
 {#if showSettings}
   <SettingsPanel onClose={() => { showSettings = false; }} />
+{/if}
+
+{#if $settings.devToolsEnabled}
+  <DevToolsPanel getIframe={getActiveIframe} />
 {/if}
 
 <style>

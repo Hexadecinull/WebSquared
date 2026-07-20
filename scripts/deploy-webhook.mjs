@@ -32,10 +32,8 @@ function runDeploy() {
   deploying = true;
   console.log(`[deploy] Starting deploy of ${BRANCH}...`);
 
-  // git reset --hard (not `pull`) so the server always ends up byte-for-byte
-  // identical to origin/main, regardless of any local drift. The `&&` chain
-  // means a failed install or build stops before `pm2 restart` ever runs —
-  // a broken build never takes down the currently-running good instance.
+  // Hard reset (not pull) so the server always matches origin exactly.
+  // The && chain means a failed build stops before pm2 restart runs.
   const cmd = [
     `cd "${REPO_DIR}"`,
     `git fetch origin ${BRANCH}`,
