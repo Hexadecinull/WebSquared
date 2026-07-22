@@ -25,7 +25,14 @@ function maybeProxy(url: string): string {
 }
 
 interface DevtoolsConsoleEntry { type: string; args: string[]; time: number }
-interface DevtoolsNetworkEntry { method: string; url: string; status: number | null; time: number; duration: number | null }
+interface DevtoolsNetworkEntry {
+  method: string;
+  url: string;
+  status: number | null;
+  time: number;
+  duration: number | null;
+  initiator: string;
+}
 
 const devtoolsLog = {
   console: [] as DevtoolsConsoleEntry[],
@@ -40,19 +47,53 @@ function stringifyArg(a: unknown): string {
   try { return JSON.stringify(a); } catch { return String(a); }
 }
 
+function pushConsole(type: string, args: string[]) {
+  devtoolsLog.console.push({ type, args, time: Date.now() });
+  if (devtoolsLog.console.length > MAX_LOG_ENTRIES) devtoolsLog.console.shift();
+}
+
 for (const method of ['log', 'warn', 'error', 'info'] as const) {
   const native = console[method].bind(console);
   console[method] = (...args: unknown[]) => {
-    devtoolsLog.console.push({ type: method, args: args.map(stringifyArg), time: Date.now() });
-    if (devtoolsLog.console.length > MAX_LOG_ENTRIES) devtoolsLog.console.shift();
+    pushConsole(method, args.map(stringifyArg));
     native(...args);
   };
 }
 
-function logNetwork(method: string, url: string, status: number | null, duration: number | null) {
-  devtoolsLog.network.push({ method, url, status, time: Date.now(), duration });
+// console.error can be silently replaced by the page's own scripts later —
+// these listeners keep catching uncaught errors either way.
+window.addEventListener('error', (e) => {
+  pushConsole('error', [e.message || 'Uncaught error', e.filename ? `(${e.filename}:${e.lineno})` : '']);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  pushConsole('error', ['Unhandled promise rejection:', stringifyArg(e.reason)]);
+});
+
+function logNetwork(method: string, url: string, status: number | null, duration: number | null, initiator: string) {
+  devtoolsLog.network.push({ method, url, status, time: Date.now(), duration, initiator });
   if (devtoolsLog.network.length > MAX_LOG_ENTRIES) devtoolsLog.network.shift();
 }
+
+// fetch/XHR patches below only see requests JS explicitly makes. The
+// overwhelming majority of a page's real traffic — images, stylesheets,
+// scripts, fonts loaded via plain HTML/CSS — never touches JS at all, so
+// Resource Timing is used here to capture everything the browser actually
+// loads, regardless of how it was requested.
+try {
+  const seenEntries = new Set<string>();
+  const observer = new PerformanceObserver((list) => {
+    for (const entry of list.getEntries()) {
+      const r = entry as PerformanceResourceTiming;
+      if (r.initiatorType === 'fetch' || r.initiatorType === 'xmlhttprequest') continue;
+      const key = `${r.name}:${r.startTime}`;
+      if (seenEntries.has(key)) continue;
+      seenEntries.add(key);
+      const status = (r as unknown as { responseStatus?: number }).responseStatus ?? null;
+      logNetwork('GET', r.name, status, Math.round(r.duration), r.initiatorType || 'other');
+    }
+  });
+  observer.observe({ type: 'resource', buffered: true });
+} catch { /* PerformanceObserver not available */ }
 
 const _fetch = window.fetch.bind(window);
 window.fetch = function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
@@ -65,8 +106,8 @@ window.fetch = function (input: RequestInfo | URL, init?: RequestInit): Promise<
     : input instanceof URL ? proxied
     : proxied === input.url ? input : new Request(proxied, input);
   return _fetch(target as RequestInfo, init).then(
-    (res) => { logNetwork(method, url, res.status, Date.now() - started); return res; },
-    (err) => { logNetwork(method, url, null, Date.now() - started); throw err; },
+    (res) => { logNetwork(method, url, res.status, Date.now() - started, 'fetch'); return res; },
+    (err) => { logNetwork(method, url, null, Date.now() - started, 'fetch'); throw err; },
   );
 };
 
@@ -92,7 +133,7 @@ class PatchedXHR extends NativeXHR {
   send(body?: Document | XMLHttpRequestBodyInit | null): void {
     this._w2Start = Date.now();
     this.addEventListener('loadend', () => {
-      logNetwork(this._w2Method, this._w2Url, this.status || null, Date.now() - this._w2Start);
+      logNetwork(this._w2Method, this._w2Url, this.status || null, Date.now() - this._w2Start, 'xhr');
     });
     super.send(body);
   }

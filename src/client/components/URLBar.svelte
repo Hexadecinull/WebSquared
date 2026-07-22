@@ -6,7 +6,14 @@
   let {
     url = '',
     onNavigate,
-  }: { url?: string; onNavigate: (url: string) => void } = $props();
+    bookmarked = false,
+    onBookmarkClick,
+  }: {
+    url?: string;
+    onNavigate: (url: string) => void;
+    bookmarked?: boolean;
+    onBookmarkClick?: () => void;
+  } = $props();
 
   let inputValue = $state('');
 
@@ -116,9 +123,15 @@
       autocapitalize="off"
       spellcheck={false}
     />
-    <button onclick={() => navigate()} aria-label="Go">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polyline points="9 18 15 12 9 6"/>
+    <button
+      class="star-btn"
+      class:bookmarked
+      onclick={() => onBookmarkClick?.()}
+      aria-label={bookmarked ? 'Edit bookmark' : 'Bookmark this page'}
+      title={bookmarked ? 'Edit bookmark' : 'Bookmark this page'}
+    >
+      <svg viewBox="0 0 24 24" fill={bookmarked ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
       </svg>
     </button>
   </div>
@@ -169,14 +182,15 @@
     color: var(--text-1); font-size: 0.875rem; font-family: inherit; min-width: 0;
   }
   input::placeholder { color: var(--text-3); }
-  button {
+  .star-btn {
     display: flex; align-items: center; justify-content: center;
-    width: 1.75rem; height: 1.75rem; border-radius: 50%;
-    border: none; background: var(--accent); color: #fff;
-    cursor: pointer; flex-shrink: 0; transition: background 0.15s;
+    width: 1.75rem; height: 1.75rem; border-radius: 6px;
+    border: none; background: transparent; color: var(--text-2);
+    cursor: pointer; flex-shrink: 0; transition: background 0.15s, color 0.15s;
   }
-  button:hover { background: var(--accent-hover); }
-  button svg { width: 0.875rem; height: 0.875rem; }
+  .star-btn:hover { background: var(--surface-1); color: var(--text-1); }
+  .star-btn.bookmarked { color: var(--accent); }
+  .star-btn svg { width: 0.95rem; height: 0.95rem; }
   .suggestions {
     position: absolute; top: calc(100% + 4px); left: 0; right: 0;
     background: var(--surface-1); border: 1px solid var(--border);

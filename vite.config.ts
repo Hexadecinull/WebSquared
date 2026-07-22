@@ -1,5 +1,8 @@
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
+import { readFileSync } from 'node:fs';
+
+const pkg = JSON.parse(readFileSync('./package.json', 'utf8'));
 
 // Only the main SPA is built by Vite. The worker scripts (service worker +
 // the client injected into every proxied page) are bundled separately by
@@ -7,6 +10,9 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 // inlined into classic <script> tags, which can't contain import/export.
 export default defineConfig({
   plugins: [svelte()],
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   server: {
     port: 5173,
     proxy: {

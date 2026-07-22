@@ -131,6 +131,12 @@ app.use(express.static(DIST_DIR));
 
 app.get('/healthz', (_req, res) => res.sendStatus(200));
 
+// Without this, Express never populates req.body, so every POST/PUT/PATCH
+// request was silently forwarded with an empty body — raw, not JSON, since
+// we need the exact bytes for any content-type (JSON, form data, file
+// uploads, binary, etc) to pass through unchanged.
+app.use(PREFIX, express.raw({ type: '*/*', limit: '50mb' }));
+
 app.use(PREFIX, (req, res, next) => {
   handleProxy(req, res).catch(next);
 });

@@ -6,7 +6,7 @@
   }: { getIframe: () => HTMLIFrameElement | undefined } = $props();
 
   interface ConsoleEntry { type: string; args: string[]; time: number }
-  interface NetworkEntry { method: string; url: string; status: number | null; time: number; duration: number | null }
+  interface NetworkEntry { method: string; url: string; status: number | null; time: number; duration: number | null; initiator: string }
 
   let open = $state(false);
   let activeTab = $state<'console' | 'network'>('console');
@@ -27,7 +27,7 @@
     open = !open;
     if (open) {
       poll();
-      pollHandle = setInterval(poll, 800);
+      pollHandle = setInterval(poll, 500);
     } else {
       clearInterval(pollHandle);
     }
@@ -80,6 +80,7 @@
         {:else}
           {#each networkEntries as entry, i (i)}
             <div class="network-line">
+              <span class="line-initiator">{entry.initiator}</span>
               <span class="line-method">{entry.method}</span>
               <span class="line-status {statusClass(entry.status)}">{entry.status ?? 'ERR'}</span>
               <span class="line-url">{entry.url}</span>
@@ -151,6 +152,10 @@
   .line-args { word-break: break-word; color: var(--text-1); }
 
   .line-method { flex-shrink: 0; width: 3.2rem; color: var(--text-2); font-weight: 600; }
+  .line-initiator {
+    flex-shrink: 0; width: 3.6rem; text-transform: uppercase; font-size: 0.6rem;
+    color: var(--text-3); font-weight: 700;
+  }
   .line-status { flex-shrink: 0; width: 2.2rem; font-weight: 700; }
   .status-ok { color: #3fb950; }
   .status-warn { color: #d29922; }

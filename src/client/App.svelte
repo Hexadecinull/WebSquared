@@ -11,6 +11,8 @@
   import BookmarksBar from './components/BookmarksBar.svelte';
   import SettingsPanel from './components/SettingsPanel.svelte';
   import DevToolsPanel from './components/DevToolsPanel.svelte';
+  import BookmarkPopup from './components/BookmarkPopup.svelte';
+  import type { Bookmark } from './stores/bookmarks';
 
   let showSettings = $state(false);
   let swReady = $state(false);
@@ -72,14 +74,18 @@
   function goForward() { getActiveFrame()?.goForward(); }
   function refresh() { getActiveFrame()?.refresh(); }
 
-  function toggleBookmark() {
+  let editingBookmark = $state<Bookmark | undefined>(undefined);
+
+  function handleBookmarkClick() {
     const tab = $activeTab;
     if (!tab?.url) return;
-    if (bookmarks.isBookmarked(tab.url)) {
-      bookmarks.remove(tab.url);
-    } else {
-      bookmarks.add(tab.url, tab.title, tab.favicon);
+    const existing = bookmarks.getByUrl(tab.url);
+    if (existing) {
+      editingBookmark = existing;
+      return;
     }
+    const id = bookmarks.add(tab.url, tab.title, tab.favicon);
+    editingBookmark = bookmarks.getByUrl(tab.url) ?? { id, url: tab.url, title: tab.title, favicon: tab.favicon, addedAt: Date.now(), folderId: null };
   }
 
   let isBookmarked = $derived(
@@ -104,16 +110,16 @@
       canBack={canBack}
       canForward={canForward}
       loading={frameLoading}
-      bookmarked={isBookmarked}
       onBack={goBack}
       onForward={goForward}
       onRefresh={refresh}
-      onBookmark={toggleBookmark}
     />
 
     <URLBar
       url={$activeTab?.url ?? ''}
       onNavigate={(url) => navigate(url)}
+      bookmarked={isBookmarked}
+      onBookmarkClick={handleBookmarkClick}
     />
 
     <div class="toolbar-end">
@@ -185,6 +191,10 @@
 
 {#if $settings.devToolsEnabled}
   <DevToolsPanel getIframe={getActiveIframe} />
+{/if}
+
+{#if editingBookmark}
+  <BookmarkPopup bookmark={editingBookmark} onClose={() => { editingBookmark = undefined; }} />
 {/if}
 
 <style>

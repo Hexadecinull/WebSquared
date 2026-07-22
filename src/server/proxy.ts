@@ -128,6 +128,34 @@ function buildRequestHeaders(req: Request, targetUrl: string): Record<string, st
   return headers;
 }
 
+function getRequestBody(req: Request): Buffer | undefined {
+  const body = (req as unknown as { body?: unknown }).body;
+  if (Buffer.isBuffer(body) && body.length > 0) return body;
+  return undefined;
+}
+
+// Blocks obvious attempts to make the server reach its own internal
+// network (loopback, RFC1918 private ranges, link-local, cloud metadata
+// endpoints). Hostname-pattern based, not DNS-resolution based — it stops
+// naive attempts but not a determined DNS-rebinding attack.
+const PRIVATE_HOSTNAME_PATTERNS = [
+  /^localhost$/i,
+  /^127\./,
+  /^10\./,
+  /^172\.(1[6-9]|2\d|3[01])\./,
+  /^192\.168\./,
+  /^169\.254\./,
+  /^0\.0\.0\.0$/,
+  /^\[?::1\]?$/,
+  /^\[?fe80:/i,
+  /^\[?fc00:/i,
+  /^\[?fd00:/i,
+];
+
+function isPrivateHostname(hostname: string): boolean {
+  return PRIVATE_HOSTNAME_PATTERNS.some((re) => re.test(hostname));
+}
+
 export async function handleProxy(req: Request, res: Response): Promise<void> {
   const encodedPart = req.path.slice(1);
 
@@ -149,6 +177,11 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
 
   if (parsedTarget.protocol !== 'http:' && parsedTarget.protocol !== 'https:') {
     res.status(400).type('text').send('Only http and https targets are supported.');
+    return;
+  }
+
+  if (isPrivateHostname(parsedTarget.hostname)) {
+    res.status(403).type('text').send('Proxying to private or internal addresses is not allowed.');
     return;
   }
 
@@ -174,10 +207,7 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
         method: req.method,
         headers: requestHeaders,
         redirect: 'manual',
-        body:
-          req.method !== 'GET' && req.method !== 'HEAD'
-            ? (req as unknown as { body: Buffer }).body
-            : undefined,
+        body: req.method !== 'GET' && req.method !== 'HEAD' ? getRequestBody(req) : undefined,
       });
     } catch (err) {
       res.status(502).type('text').send(`Upstream fetch failed: ${(err as Error).message}`);
@@ -194,6 +224,11 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
 
         if (requestHost && next.host.toLowerCase() === requestHost) {
           res.status(200).type('html').send(renderSelfLoopPage());
+          return;
+        }
+
+        if (isPrivateHostname(next.hostname)) {
+          res.status(403).type('text').send('Proxying to private or internal addresses is not allowed.');
           return;
         }
 

@@ -3,20 +3,16 @@
     canBack,
     canForward,
     loading,
-    bookmarked,
     onBack,
     onForward,
     onRefresh,
-    onBookmark,
   }: {
     canBack: boolean;
     canForward: boolean;
     loading: boolean;
-    bookmarked: boolean;
     onBack: () => void;
     onForward: () => void;
     onRefresh: () => void;
-    onBookmark: () => void;
   } = $props();
 </script>
 
@@ -42,11 +38,6 @@
       </svg>
     {/if}
   </button>
-  <button onclick={onBookmark} aria-label={bookmarked ? 'Remove bookmark' : 'Bookmark'} title={bookmarked ? 'Remove bookmark' : 'Bookmark'} class:bookmarked>
-    <svg viewBox="0 0 24 24" fill={bookmarked ? 'var(--accent)' : 'none'} stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
-    </svg>
-  </button>
 </div>
 
 <style>
@@ -59,12 +50,5 @@
   }
   button:hover:not(:disabled) { background: var(--surface-2); color: var(--text-1); }
   button:disabled { opacity: 0.3; cursor: default; }
-  button.bookmarked { color: var(--accent); }
-  button.bookmarked svg { animation: bookmark-pop 0.3s ease; }
-  @keyframes bookmark-pop {
-    0% { transform: scale(1); }
-    40% { transform: scale(1.35); }
-    100% { transform: scale(1); }
-  }
   button svg { width: 1rem; height: 1rem; }
 </style>
