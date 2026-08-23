@@ -237,8 +237,20 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
   const rawQuery = req.url.includes('?') ? req.url.slice(req.url.indexOf('?') + 1) : '';
   if (rawQuery) {
     parsedTarget.search = parsedTarget.search ? `${parsedTarget.search}&${rawQuery}` : `?${rawQuery}`;
-    targetUrl = parsedTarget.href;
   }
+
+  if (parsedTarget.protocol === 'http:') parsedTarget.protocol = 'https:';
+  if (parsedTarget.protocol !== 'https:') {
+    res.status(400).type('text').send('Only HTTP(S) targets are allowed.');
+    return;
+  }
+
+  if (isPrivateHostname(parsedTarget.hostname)) {
+    res.status(403).type('text').send('Proxying to private or internal addresses is not allowed.');
+    return;
+  }
+
+  targetUrl = parsedTarget.href;
 
   if (parsedTarget.protocol !== 'http:' && parsedTarget.protocol !== 'https:') {
     res.status(400).type('text').send('Only http and https targets are supported.');
