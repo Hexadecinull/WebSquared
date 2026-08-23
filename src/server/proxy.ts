@@ -28,6 +28,18 @@ const BLOCKED_RESPONSE_HEADERS = new Set([
   'set-cookie',
 ]);
 
+const ALLOWED_PROXY_HOSTS = new Set(
+  (process.env.PROXY_ALLOWED_HOSTS ?? '')
+    .split(',')
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean),
+);
+
+function isAllowedTargetHostname(hostname: string): boolean {
+  if (ALLOWED_PROXY_HOSTS.size === 0) return false;
+  return ALLOWED_PROXY_HOSTS.has(hostname.toLowerCase());
+}
+
 // Forwarded by blocklist, not allowlist, since sites rely on custom headers; this excludes hop-by-hop headers, computed ones, and IP-leaking proxy metadata.
 const REQUEST_HEADER_BLOCKLIST = new Set([
   'host',
@@ -250,6 +262,11 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
     return;
   }
 
+  if (!isAllowedTargetHostname(parsedTarget.hostname)) {
+    res.status(403).type('text').send('Proxying to this host is not allowed.');
+    return;
+  }
+
   targetUrl = parsedTarget.href;
 
   if (parsedTarget.protocol !== 'http:' && parsedTarget.protocol !== 'https:') {
@@ -324,6 +341,11 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
 
         if (isPrivateHostname(next.hostname)) {
           res.status(403).type('text').send('Proxying to private or internal addresses is not allowed.');
+          return;
+        }
+
+        if (!isAllowedTargetHostname(next.hostname)) {
+          res.status(403).type('text').send('Proxying to this host is not allowed.');
           return;
         }
 
