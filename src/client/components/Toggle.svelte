@@ -36,16 +36,17 @@
   }
   .knob {
     position: absolute;
-    top: 2px;
-    left: 2px;
+    top: 50%;
+    left: 0.125rem;
     width: 1rem;
     height: 1rem;
     border-radius: 50%;
     background: #fff;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-    transition: transform 0.15s;
+    transform: translateY(-50%);
+    transition: left 0.15s;
   }
   .toggle.on .knob {
-    transform: translateX(1rem);
+    left: calc(100% - 1rem - 0.125rem);
   }
 </style>

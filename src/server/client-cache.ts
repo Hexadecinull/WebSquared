@@ -10,7 +10,7 @@ let cached = '';
 try {
   cached = readFileSync(join(DIST_DIR, 'w2-client.js'), 'utf8');
 } catch {
-  console.warn('[w2] Could not inline w2-client.js — falling back to <script src>');
+  console.warn('[w2] Could not inline w2-client.js, falling back to <script src>');
 }
 
 export function getInlineClientScript(): string {

@@ -60,8 +60,7 @@ for (const method of ['log', 'warn', 'error', 'info'] as const) {
   };
 }
 
-// console.error can be silently replaced by the page's own scripts later —
-// these listeners keep catching uncaught errors either way.
+// These listeners keep catching uncaught errors even if the page's own scripts later replace console.error.
 window.addEventListener('error', (e) => {
   pushConsole('error', [e.message || 'Uncaught error', e.filename ? `(${e.filename}:${e.lineno})` : '']);
 });
@@ -74,11 +73,7 @@ function logNetwork(method: string, url: string, status: number | null, duration
   if (devtoolsLog.network.length > MAX_LOG_ENTRIES) devtoolsLog.network.shift();
 }
 
-// fetch/XHR patches below only see requests JS explicitly makes. The
-// overwhelming majority of a page's real traffic — images, stylesheets,
-// scripts, fonts loaded via plain HTML/CSS — never touches JS at all, so
-// Resource Timing is used here to capture everything the browser actually
-// loads, regardless of how it was requested.
+// fetch/XHR patches below only see requests JS explicitly makes; Resource Timing is used here too, to also capture images, stylesheets, scripts, and fonts loaded straight from HTML/CSS.
 try {
   const seenEntries = new Set<string>();
   const observer = new PerformanceObserver((list) => {
@@ -187,8 +182,7 @@ try {
   });
 } catch { /* best-effort */ }
 
-// Rewrites src/href set programmatically after page load, not just what
-// was present in the server-rendered HTML.
+// Rewrites src/href set programmatically after page load, not just what was present in the server-rendered HTML.
 function patchUrlProperty(ctor: { prototype: object } | undefined, prop: string) {
   if (!ctor) return;
   const descriptor = Object.getOwnPropertyDescriptor(ctor.prototype, prop);
@@ -205,12 +199,14 @@ patchUrlProperty(window.HTMLImageElement, 'src');
 patchUrlProperty(window.HTMLScriptElement, 'src');
 patchUrlProperty(window.HTMLLinkElement, 'href');
 patchUrlProperty(window.HTMLIFrameElement, 'src');
+patchUrlProperty(window.HTMLAnchorElement, 'href');
 
 const URL_ATTR_TAGS: Record<string, string> = {
   IMG: 'src',
   SCRIPT: 'src',
   LINK: 'href',
   IFRAME: 'src',
+  A: 'href',
 };
 
 const _setAttribute = Element.prototype.setAttribute;
@@ -223,11 +219,38 @@ Element.prototype.setAttribute = function (name: string, value: string): void {
   _setAttribute.call(this, name, value);
 };
 
+// A same-origin iframe means window.top/parent are real, readable references to WebSquared's own top window, which some sites use to detect framing and force-navigate top.location to their real domain; this makes the page think it was never framed in the first place.
+try {
+  Object.defineProperty(window, 'top', { get() { return window; }, configurable: true });
+  Object.defineProperty(window, 'parent', { get() { return window; }, configurable: true });
+  Object.defineProperty(window, 'frameElement', { get() { return null; }, configurable: true });
+} catch { /* some browsers make these non-configurable; best-effort */ }
+
+// Set-Cookie headers already get Domain/Path normalized server-side, but document.cookie set straight from JS bypasses that, which is why cookie consent, logins, and similar state kept resetting on every visit.
+try {
+  const cookieDescriptor = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie');
+  if (cookieDescriptor?.get && cookieDescriptor?.set) {
+    Object.defineProperty(Document.prototype, 'cookie', {
+      configurable: true,
+      get(this: Document) { return cookieDescriptor.get!.call(this); },
+      set(this: Document, value: string) {
+        const cleaned = String(value).replace(/;\s*domain=[^;]*/gi, '').replace(/;\s*path=[^;]*/gi, '');
+        cookieDescriptor.set!.call(this, cleaned);
+      },
+    });
+  }
+} catch { /* best-effort */ }
+
 document.addEventListener('click', (e) => {
   const a = (e.target as Element)?.closest('a');
   if (!a) return;
   const href = a.getAttribute('href');
   if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+  // A download link's href is already proxied (server-side rewriting, or
+  // the anchor/attribute patches above for JS-created links), so it's
+  // same-origin; let the browser's native download behavior handle it
+  // instead of navigating the iframe to it.
+  if (a.hasAttribute('download')) return;
   const resolved = resolveAgainstReal(href);
   if (!isProxiable(resolved)) return;
   e.preventDefault();

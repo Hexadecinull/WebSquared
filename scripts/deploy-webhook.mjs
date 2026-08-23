@@ -26,7 +26,7 @@ let deploying = false;
 
 function runDeploy() {
   if (deploying) {
-    console.log('[deploy] A deploy is already running — this push will be picked up by the next one.');
+    console.log('[deploy] A deploy is already running, this push will be picked up by the next one.');
     return;
   }
   deploying = true;

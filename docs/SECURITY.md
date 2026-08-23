@@ -26,32 +26,31 @@ and the deploy tooling in this repository.
 ## What's out of scope
 
 - The content of third-party sites accessed *through* a WebSquared
-  instance — that's between you and the site you're visiting.
+  instance. That's between you and the site you're visiting.
 - The fact that WebSquared lets traffic reach sites that a network
   administrator has blocked. That's the stated purpose of the project,
   not a vulnerability. If you're a network operator with concerns about
   WebSquared being used on your network, that's a policy/network question
   for your own infrastructure, not something we can fix in this codebase.
 - Security of a specific self-hosted instance's server, OS, or hosting
-  environment — those are the responsibility of whoever operates that
+  environment. Those are the responsibility of whoever operates that
   instance.
 
 ## Current defenses
 
-- **Self-loop guard** — the proxy refuses to proxy its own domain (as an
+- **Self-loop guard**: the proxy refuses to proxy its own domain (as an
   initial request or via a redirect), preventing recursive embedding.
-- **SSRF guard** — requests to loopback, RFC1918 private ranges, and
+- **SSRF guard**: requests to loopback, RFC1918 private ranges, and
   link-local addresses are rejected, both as an initial target and on
   redirect. This is hostname-pattern matching, not DNS-resolution-based,
   so it stops naive attempts but not a determined DNS-rebinding attack.
-- **Per-origin cookie namespacing** — cookies from different proxied
+- **Per-origin cookie namespacing**: cookies from different proxied
   sites can't collide or be read by a different origin than the one that
   set them, even though they all share the proxy's one real domain.
-- **No server-side logging of browsing activity** — the server doesn't
+- **No server-side logging of browsing activity**: the server doesn't
   log which URLs are being proxied, request contents, or client IPs
   anywhere by default.
-- **Security headers stripped from upstream, not weakened on our end** —
-  we remove the *target* site's CSP/X-Frame-Options (necessary for the
+- **Security headers stripped from upstream, not weakened on our end**: we remove the *target* site's CSP/X-Frame-Options (necessary for the
   page to render inside our iframe at all), we don't add anything that
   weakens the proxy's own security posture.
 
@@ -67,7 +66,7 @@ coverage than actually exists:
   (e.g. a Cloudflare rule) in front of WebSquared until this is addressed
   in the application itself.
 - **SSRF protection is pattern-based**, not resolution-based (see above).
-- **No CAPTCHA/abuse detection of our own** — WebSquared doesn't attempt
+- **No CAPTCHA/abuse detection of our own**: WebSquared doesn't attempt
   to detect or throttle automated/bot traffic hitting it.
 
 ## Supported versions
@@ -75,4 +74,4 @@ coverage than actually exists:
 Only the latest version on the `main` branch is supported. Since
 WebSquared is typically self-hosted and deployed directly from `main`,
 there isn't a maintained set of older release branches to backport fixes
-to — updating to the latest commit is the way to get a fix.
+to, updating to the latest commit is the way to get a fix.

@@ -2,20 +2,21 @@
   import { fromProxyPath, PREFIX } from '../../shared/url';
   import { tabs } from '../stores/tabs';
   import { history } from '../stores/history';
+  import { settings } from '../stores/settings';
 
   let {
     tabId,
     src,
     desktopMode = false,
-  }: { tabId: string; src: string; desktopMode?: boolean } = $props();
+    isPrivate = false,
+  }: { tabId: string; src: string; desktopMode?: boolean; isPrivate?: boolean } = $props();
 
   let frame: HTMLIFrameElement | undefined = $state();
   let historyStack = $state<string[]>([]);
   let historyIndex = $state(-1);
   let loadTimeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
-  // Plain variable, not $state — guards the effect below against re-running
-  // for a `src` it's already processed, regardless of what triggered it.
+  // Plain variable, not $state, so it doesn't trigger the effect below when it changes; it only guards against re-processing a `src` already handled.
   let lastProcessedSrc = '';
 
   const LOAD_TIMEOUT_MS = 20_000;
@@ -96,7 +97,8 @@
     const title = (() => {
       try { return frame?.contentDocument?.title || new URL(realUrl).hostname; } catch { return realUrl; }
     })();
-    history.push(realUrl, title);
+    // Gated here, the one place every load funnels through, so a private tab or history-off setting can never leak an entry regardless of how the page was reached.
+    if (!isPrivate && $settings.saveHistory) history.push(realUrl, title);
   }
 </script>
 

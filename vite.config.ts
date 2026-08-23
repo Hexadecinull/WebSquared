@@ -4,10 +4,7 @@ import { readFileSync } from 'node:fs';
 
 const pkg = JSON.parse(readFileSync('./package.json', 'utf8'));
 
-// Only the main SPA is built by Vite. The worker scripts (service worker +
-// the client injected into every proxied page) are bundled separately by
-// esbuild as standalone IIFEs (see scripts/build-workers.mjs) — they get
-// inlined into classic <script> tags, which can't contain import/export.
+// Only the main SPA is built by Vite; the worker scripts are bundled separately by esbuild as standalone IIFEs (see scripts/build-workers.mjs) since they're inlined into classic <script> tags, which can't contain import/export.
 export default defineConfig({
   plugins: [svelte()],
   define: {

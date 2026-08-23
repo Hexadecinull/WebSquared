@@ -1,23 +1,45 @@
 <script lang="ts">
   import { fade, fly } from 'svelte/transition';
-  import { settings, isMobile } from '../stores/settings';
+  import { settings, isMobile, DEFAULT_ACCENT } from '../stores/settings';
   import { history } from '../stores/history';
   import { bookmarks } from '../stores/bookmarks';
+  import { tabs } from '../stores/tabs';
   import { onlineCount } from '../stores/presence';
   import Toggle from './Toggle.svelte';
   import HistoryManager from './HistoryManager.svelte';
   import BookmarksManager from './BookmarksManager.svelte';
+  import ConfirmDialog from './ConfirmDialog.svelte';
+  import LegalDocViewer from './LegalDocViewer.svelte';
+  import termsDoc from '../../../docs/TERMS.md?raw';
+  import privacyDoc from '../../../docs/PRIVACY.md?raw';
+  import securityDoc from '../../../docs/SECURITY.md?raw';
+  import conductDoc from '../../../docs/CODE_OF_CONDUCT.md?raw';
 
   let { onClose }: { onClose: () => void } = $props();
 
   const mobile = isMobile();
 
-  type Theme = 'dark' | 'light' | 'system';
-  type Engine = 'google' | 'bing' | 'duckduckgo' | 'brave' | 'ecosia';
+  type Theme = 'dark' | 'light' | 'system' | 'amoled';
+  type Engine = 'google' | 'bing' | 'duckduckgo' | 'brave' | 'ecosia' | 'qwant';
   type FontSize = 'small' | 'medium' | 'large';
   type Category = 'appearance' | 'browsing' | 'history' | 'bookmarks' | 'privacy' | 'developer' | 'about';
 
   let activeCategory = $state<Category>('appearance');
+
+  let pendingConfirm = $state<'history' | 'bookmarks' | 'reset' | null>(null);
+  let openLegalDoc = $state<{ title: string; content: string } | null>(null);
+
+  function confirmPending() {
+    if (pendingConfirm === 'history') history.clear();
+    else if (pendingConfirm === 'bookmarks') bookmarks.clear();
+    else if (pendingConfirm === 'reset') { history.clear(); bookmarks.clear(); tabs.forgetPersisted(); settings.reset(); }
+    pendingConfirm = null;
+  }
+
+  function setRestoreTabs(v: boolean) {
+    settings.set('restoreTabsOnStartup', v);
+    if (!v) tabs.forgetPersisted();
+  }
 
   const CATEGORIES: { id: Category; label: string; icon: string }[] = [
     { id: 'appearance', label: 'Appearance', icon: 'M12 3v1m0 16v1m9-9h-1M4 12H3m15.36 6.36l-.7-.7M6.34 6.34l-.7-.7m12.02 0l-.7.7M6.34 17.66l-.7.7M12 7a5 5 0 100 10 5 5 0 000-10z' },
@@ -61,6 +83,7 @@
             <select value={$settings.theme} onchange={(e) => settings.set('theme', (e.currentTarget as HTMLSelectElement).value as Theme)}>
               <option value="dark">Dark</option>
               <option value="light">Light</option>
+              <option value="amoled">AMOLED</option>
               <option value="system">System</option>
             </select>
           </label>
@@ -76,6 +99,26 @@
             Smooth scrolling
             <Toggle checked={$settings.smoothScrolling} onChange={(v) => settings.set('smoothScrolling', v)} ariaLabel="Smooth scrolling" />
           </label>
+          <label>
+            Accent
+            <span class="accent-row">
+              <input
+                type="color"
+                class="accent-swatch"
+                value={$settings.accent}
+                onchange={(e) => settings.set('accent', (e.currentTarget as HTMLInputElement).value)}
+                aria-label="Accent color"
+              />
+              {#if $settings.accent !== DEFAULT_ACCENT}
+                <button class="mini-reset" onclick={() => settings.set('accent', DEFAULT_ACCENT)}>Reset</button>
+              {/if}
+            </span>
+          </label>
+          <label class="toggle-row">
+            Deeper accent
+            <Toggle checked={$settings.deeperAccent} onChange={(v) => settings.set('deeperAccent', v)} ariaLabel="Deeper accent" />
+          </label>
+          <p class="hint">Deeper accent tints the background, panels, and borders with your accent color too, instead of just buttons and links.</p>
         </section>
       {:else if activeCategory === 'browsing'}
         <section>
@@ -87,6 +130,7 @@
               <option value="duckduckgo">DuckDuckGo</option>
               <option value="brave">Brave Search</option>
               <option value="ecosia">Ecosia</option>
+              <option value="qwant">Qwant</option>
             </select>
           </label>
           <label class="toggle-row">
@@ -94,9 +138,23 @@
             <Toggle checked={$settings.openLinksInNewTab} onChange={(v) => settings.set('openLinksInNewTab', v)} ariaLabel="Open links in new tab" />
           </label>
           <label class="toggle-row">
-            Block ads (experimental)
+            Block ads
             <Toggle checked={$settings.blockAds} onChange={(v) => settings.set('blockAds', v)} ariaLabel="Block ads" />
           </label>
+          <p class="hint">Blocks known ad and tracker domains at the proxy level before they're ever fetched.</p>
+          <label class="toggle-row">
+            Block adult content
+            <Toggle checked={$settings.blockAdult} onChange={(v) => settings.set('blockAdult', v)} ariaLabel="Block adult content" />
+          </label>
+          <label class="toggle-row">
+            Block gambling content
+            <Toggle checked={$settings.blockGambling} onChange={(v) => settings.set('blockGambling', v)} ariaLabel="Block gambling content" />
+          </label>
+          <label class="toggle-row">
+            Block malicious &amp; phishing sites
+            <Toggle checked={$settings.blockMalware} onChange={(v) => settings.set('blockMalware', v)} ariaLabel="Block malicious and phishing sites" />
+          </label>
+          <p class="hint">These use community-maintained domain lists (in the same style as uBlock Origin's) and update automatically. Malicious/phishing blocking defaults on since it protects this server too, not just your browsing.</p>
           {#if mobile}
             <label class="toggle-row">
               Desktop mode
@@ -108,14 +166,14 @@
         <section>
           <HistoryManager />
           {#if $history.length > 0}
-            <button class="danger-btn" onclick={() => history.clear()}>Clear all history</button>
+            <button class="danger-btn" onclick={() => (pendingConfirm = 'history')}>Clear all history</button>
           {/if}
         </section>
       {:else if activeCategory === 'bookmarks'}
         <section>
           <BookmarksManager />
           {#if $bookmarks.length > 0}
-            <button class="danger-btn" onclick={() => bookmarks.clear()}>Clear all bookmarks</button>
+            <button class="danger-btn" onclick={() => (pendingConfirm = 'bookmarks')}>Clear all bookmarks</button>
           {/if}
         </section>
       {:else if activeCategory === 'privacy'}
@@ -124,7 +182,12 @@
             Save browsing history
             <Toggle checked={$settings.saveHistory} onChange={(v) => settings.set('saveHistory', v)} ariaLabel="Save browsing history" />
           </label>
-          <button class="danger-btn" onclick={() => { history.clear(); bookmarks.clear(); settings.reset(); }}>Reset all data</button>
+          <label class="toggle-row">
+            Remember open tabs
+            <Toggle checked={$settings.restoreTabsOnStartup} onChange={setRestoreTabs} ariaLabel="Remember open tabs" />
+          </label>
+          <p class="hint">Off by default: WebSquared opens to a single new tab each time. Turn this on to reopen your previous tabs instead.</p>
+          <button class="danger-btn" onclick={() => (pendingConfirm = 'reset')}>Reset all data</button>
         </section>
       {:else if activeCategory === 'developer'}
         <section>
@@ -137,7 +200,7 @@
             the site you're currently browsing.
             {#if !mobile}
               On desktop, your browser's own DevTools (F12) already give you
-              this and far more — this is mainly useful on mobile, where
+              this and far more. This is mainly useful on mobile, where
               there's no built-in equivalent.
             {/if}
           </p>
@@ -148,16 +211,49 @@
             <span class="online-dot"></span>
             <span>{$onlineCount} {$onlineCount === 1 ? 'person' : 'people'} online</span>
           </div>
-          <p class="about-line">WebSquared v{__APP_VERSION__} — GPL-3.0</p>
+          <p class="about-line">WebSquared v{__APP_VERSION__}, GPL-3.0</p>
           <p class="about-line">Created by SSMG4 and contributors</p>
           <p class="about-line">
             <a href="https://github.com/Hexadecinull/WebSquared" target="_blank" rel="noopener noreferrer">GitHub →</a>
           </p>
+          <div class="legal-links">
+            <button class="legal-btn" onclick={() => (openLegalDoc = { title: 'Terms of Service', content: termsDoc })}>Terms of Service</button>
+            <button class="legal-btn" onclick={() => (openLegalDoc = { title: 'Privacy Policy', content: privacyDoc })}>Privacy Policy</button>
+            <button class="legal-btn" onclick={() => (openLegalDoc = { title: 'Security Policy', content: securityDoc })}>Security Policy</button>
+            <button class="legal-btn" onclick={() => (openLegalDoc = { title: 'Code of Conduct', content: conductDoc })}>Code of Conduct</button>
+          </div>
         </section>
       {/if}
     </div>
   </div>
 </div>
+
+{#if pendingConfirm === 'history'}
+  <ConfirmDialog
+    message="Clear all browsing history? This can't be undone."
+    confirmLabel="Clear history"
+    onConfirm={confirmPending}
+    onCancel={() => (pendingConfirm = null)}
+  />
+{:else if pendingConfirm === 'bookmarks'}
+  <ConfirmDialog
+    message="Clear all bookmarks and folders? This can't be undone."
+    confirmLabel="Clear bookmarks"
+    onConfirm={confirmPending}
+    onCancel={() => (pendingConfirm = null)}
+  />
+{:else if pendingConfirm === 'reset'}
+  <ConfirmDialog
+    message="Reset all WebSquared data, including history, bookmarks, and settings? This can't be undone."
+    confirmLabel="Reset everything"
+    onConfirm={confirmPending}
+    onCancel={() => (pendingConfirm = null)}
+  />
+{/if}
+
+{#if openLegalDoc}
+  <LegalDocViewer title={openLegalDoc.title} content={openLegalDoc.content} onClose={() => (openLegalDoc = null)} />
+{/if}
 
 <style>
   .overlay {
@@ -218,10 +314,29 @@
     transition: background 0.15s;
   }
   .danger-btn:hover { background: rgba(248, 81, 73, 0.1); }
-  .hint { font-size: 0.78rem; color: var(--text-2); line-height: 1.5; }
+  .hint { font-size: 0.78rem; color: var(--text-2); line-height: 1.5; margin-top: -0.4rem; }
   .about-line { font-size: 0.8rem; color: var(--text-2); }
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
+
+  .accent-row { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+  .accent-swatch {
+    width: 2rem; height: 1.5rem; padding: 0; border: 1px solid var(--border);
+    border-radius: 6px; background: transparent; cursor: pointer;
+  }
+  .mini-reset {
+    border: none; background: transparent; color: var(--text-2);
+    font-size: 0.72rem; cursor: pointer; text-decoration: underline;
+  }
+  .mini-reset:hover { color: var(--text-1); }
+
+  .legal-links { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.4rem; }
+  .legal-btn {
+    padding: 0.4rem 0.7rem; border-radius: 7px; border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--text-1); font-size: 0.75rem;
+    font-family: inherit; cursor: pointer; transition: background 0.15s;
+  }
+  .legal-btn:hover { background: var(--border); }
 
   .online-pill {
     display: inline-flex; align-items: center; gap: 0.4rem; width: fit-content;

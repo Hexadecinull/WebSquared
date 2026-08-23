@@ -1,6 +1,6 @@
 # Web² (WebSquared)
 
-An ad-free, open-source, lightweight web proxy. Browse freely from anywhere — no extensions, no installs, no ads.
+An ad-free, open-source, lightweight web proxy. Browse freely from anywhere, no extensions, no installs, no ads.
 
 [![CI](https://github.com/Hexadecinull/WebSquared/actions/workflows/ci.yml/badge.svg)](https://github.com/Hexadecinull/WebSquared/actions/workflows/ci.yml)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
@@ -9,17 +9,17 @@ An ad-free, open-source, lightweight web proxy. Browse freely from anywhere — 
 
 ## Features
 
-- **Ad-free** — no advertisements, no trackers, no data collection
-- **Lightweight** — minimal dependencies, fast startup
-- **Tabs** — open, close, and switch between multiple proxied sites, including private tabs
-- **Back / forward / refresh** — a real per-tab navigation history, like a normal browser
-- **Bookmarks & history** — saved locally in your browser, with folders and individual-entry management
-- **Settings** — theme, font size, search engine, desktop mode (mobile), and more
-- **Live "online now" counter** — see how many people are currently browsing through the same instance
-- **Self-loop & SSRF protection** — the proxy can't be pointed at itself or at internal/private addresses
-- **Per-site cookie isolation** — cookies from different proxied sites are kept separate, so logging into one site can't collide with another
-- **Service Worker** — intercepts dynamically-generated requests for deeper compatibility
-- **URL obfuscation** — target URLs are XOR-encoded and base64url-encoded so they are not plaintext in the address bar
+- **Ad-free**: no advertisements, no trackers, no data collection
+- **Lightweight**: minimal dependencies, fast startup
+- **Tabs**: open, close, and switch between multiple proxied sites, including private tabs
+- **Back / forward / refresh**: a real per-tab navigation history, like a normal browser
+- **Bookmarks & history**: saved locally in your browser, with folders and individual-entry management
+- **Settings**: theme, font size, search engine, desktop mode (mobile), and more
+- **Live "online now" counter**: see how many people are currently browsing through the same instance
+- **Self-loop & SSRF protection**: the proxy can't be pointed at itself or at internal/private addresses
+- **Per-site cookie isolation**: cookies from different proxied sites are kept separate, so logging into one site can't collide with another
+- **Service Worker**: intercepts dynamically-generated requests for deeper compatibility
+- **URL obfuscation**: target URLs are XOR-encoded and base64url-encoded so they are not plaintext in the address bar
 
 For how everything actually works under the hood, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 For a guide to using every feature, see [USAGE.md](docs/USAGE.md).
@@ -60,27 +60,27 @@ GitHub auto-deploy webhook so pushing to `main` deploys itself.
 
 ## Known limitations
 
-- WebSocket proxying through Wisp requires a WASM TLS transport (epoxy-tls / libcurl.js) — the Wisp server is present but the browser-side transport is not yet wired up
+- WebSocket proxying through Wisp requires a WASM TLS transport (epoxy-tls / libcurl.js), the Wisp server is present but the browser-side transport is not yet wired up
 - Sites that rely on `window.location` equality checks or `document.domain` manipulation may behave incorrectly
 - OAuth flows that use `postMessage` across origins will not work
 - Service workers registered by the proxied site itself are not supported
 - DRM-protected video (Widevine/EME) generally won't play through the proxy
-- CAPTCHA/anti-bot challenges tied to their own domain (e.g. Google's reCAPTCHA) will generally fail — this is inherent to how any proxy works, not fixable on our end
+- CAPTCHA/anti-bot challenges tied to their own domain (e.g. Google's reCAPTCHA) will generally fail. This is inherent to how any proxy works, not fixable on our end
 
 ## Documentation
 
-- [Usage guide](docs/USAGE.md) — how to use every feature
-- [Architecture](docs/ARCHITECTURE.md) — how the project actually works
-- [Deployment](docs/DEPLOY.md) — self-hosting guide
-- [Contributing](docs/CONTRIBUTING.md) — how to contribute
-- [Security policy](docs/SECURITY.md) — reporting vulnerabilities, current defenses
+- [Usage guide](docs/USAGE.md): how to use every feature
+- [Architecture](docs/ARCHITECTURE.md): how the project actually works
+- [Deployment](docs/DEPLOY.md): self-hosting guide
+- [Contributing](docs/CONTRIBUTING.md): how to contribute
+- [Security policy](docs/SECURITY.md): reporting vulnerabilities, current defenses
 - [Privacy policy](docs/PRIVACY.md)
 - [Terms of Service](docs/TERMS.md)
 - [Code of Conduct](docs/CODE_OF_CONDUCT.md)
 
 ## Contributing
 
-Pull requests are welcome — see [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines. All contributions are made under the GPL-3.0 license.
+Pull requests are welcome, see [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines. All contributions are made under the GPL-3.0 license.
 
 ## License
 

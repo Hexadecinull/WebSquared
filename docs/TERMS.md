@@ -17,13 +17,13 @@ You are responsible for how you use WebSquared, including:
 
 - Complying with the acceptable use policies of whatever network you're
   on (school, workplace, or otherwise). WebSquared does not decide what's
-  appropriate for you to access on someone else's network — that's a
+  appropriate for you to access on someone else's network. That's a
   policy set by the network's owner/administrator, and it's on you to
   respect it.
 - Complying with the laws that apply to you wherever you are.
 - Not using WebSquared to access, transmit, or facilitate access to
   illegal content, or to attack, abuse, or attempt to compromise any
-  system — including WebSquared's own infrastructure or the sites you
+  system, including WebSquared's own infrastructure or the sites you
   access through it.
 
 ## No warranty

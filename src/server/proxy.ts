@@ -1,9 +1,12 @@
 import type { Request, Response } from 'express';
 import { Readable } from 'node:stream';
+import { isIP } from 'node:net';
 import { fromProxyPath, toProxyUrl, PREFIX } from '../shared/url.js';
 import { rewriteHtml } from './rewrite/html.js';
 import { rewriteCss } from './rewrite/css.js';
-import { renderSelfLoopPage } from './rewrite/blocked.js';
+import { renderSelfLoopPage, renderContentFilterPage } from './rewrite/blocked.js';
+import { isAdRequest, respondBlocked } from './rewrite/adblock.js';
+import { isBlockedByCategory, type FilterCategory } from './rewrite/blocklists.js';
 
 const BLOCKED_RESPONSE_HEADERS = new Set([
   'content-security-policy',
@@ -25,10 +28,7 @@ const BLOCKED_RESPONSE_HEADERS = new Set([
   'set-cookie',
 ]);
 
-// Forwarded by blocklist, not allowlist: sites rely on custom headers
-// (RSC routing, CSRF tokens, range requests, sec-fetch-*, etc). This list
-// excludes hop-by-hop headers, ones we compute ourselves, and reverse-proxy
-// metadata that would otherwise leak the visitor's real IP.
+// Forwarded by blocklist, not allowlist, since sites rely on custom headers; this excludes hop-by-hop headers, computed ones, and IP-leaking proxy metadata.
 const REQUEST_HEADER_BLOCKLIST = new Set([
   'host',
   'connection',
@@ -61,8 +61,7 @@ const DEFAULT_USER_AGENT =
 
 const REDIRECT_LIMIT = 5;
 
-// Cookies get namespaced per target origin so different proxied sites
-// don't collide in the browser's one shared cookie jar.
+// Cookies get namespaced per target origin so different proxied sites don't collide in the browser's one shared cookie jar.
 const COOKIE_NS_PREFIX = 'w2c_';
 
 function hashOrigin(origin: string): string {
@@ -134,26 +133,85 @@ function getRequestBody(req: Request): Buffer | undefined {
   return undefined;
 }
 
-// Blocks obvious attempts to make the server reach its own internal
-// network (loopback, RFC1918 private ranges, link-local, cloud metadata
-// endpoints). Hostname-pattern based, not DNS-resolution based — it stops
-// naive attempts but not a determined DNS-rebinding attack.
-const PRIVATE_HOSTNAME_PATTERNS = [
-  /^localhost$/i,
+// Blocks obvious attempts to reach internal network addresses; hostname-pattern based, so it stops naive attempts but not a determined DNS-rebinding attack.
+const PRIVATE_IPV4_PATTERNS = [
   /^127\./,
   /^10\./,
   /^172\.(1[6-9]|2\d|3[01])\./,
   /^192\.168\./,
   /^169\.254\./,
-  /^0\.0\.0\.0$/,
-  /^\[?::1\]?$/,
-  /^\[?fe80:/i,
-  /^\[?fc00:/i,
-  /^\[?fd00:/i,
+  /^0\./,
 ];
 
-function isPrivateHostname(hostname: string): boolean {
-  return PRIVATE_HOSTNAME_PATTERNS.some((re) => re.test(hostname));
+const PRIVATE_IPV6_PATTERNS = [
+  /^::1$/,
+  /^::$/,
+  /^fe80:/i,
+  /^fc00:/i,
+  /^fd00:/i,
+];
+
+function isPrivateIPv4(addr: string): boolean {
+  return PRIVATE_IPV4_PATTERNS.some((re) => re.test(addr));
+}
+
+// Node/the WHATWG URL parser canonicalizes IPv4-mapped IPv6 addresses like ::ffff:127.0.0.1 into hex form (::ffff:7f00:1); this decodes that back into IPv4 octets so it hits the same private-range check as any other IPv4 address.
+function extractMappedIPv4(addr: string): string | null {
+  const match = addr.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+  if (!match) return null;
+  const hi = parseInt(match[1], 16);
+  const lo = parseInt(match[2], 16);
+  return [(hi >> 8) & 255, hi & 255, (lo >> 8) & 255, lo & 255].join('.');
+}
+
+// Hostname-pattern based, not DNS-resolution based, using Node's own IP classification so IPv6 literals (bracketed and IPv4-mapped forms included) are handled correctly, not just IPv4.
+function isPrivateHostname(rawHostname: string): boolean {
+  const hostname = rawHostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (hostname === 'localhost' || hostname.endsWith('.localhost')) return true;
+
+  if (isIP(hostname) === 4) return isPrivateIPv4(hostname);
+
+  if (isIP(hostname) === 6) {
+    const mapped = extractMappedIPv4(hostname);
+    if (mapped) return isPrivateIPv4(mapped);
+    return PRIVATE_IPV6_PATTERNS.some((re) => re.test(hostname));
+  }
+
+  return false;
+}
+
+// The client's settings live in localStorage, so anything enforced here rides along as a plain, unnamespaced cookie on the top-level page instead (see App.svelte's settings-to-cookie sync).
+function readFlagCookie(rawCookieHeader: string | undefined, name: string): boolean {
+  if (!rawCookieHeader) return false;
+  return rawCookieHeader.split(';').some((pair) => pair.trim() === `${name}=1`);
+}
+
+const CATEGORY_COOKIES: Record<FilterCategory, string> = {
+  adult: 'w2_block_adult',
+  gambling: 'w2_block_gambling',
+  malware: 'w2_block_malware',
+};
+
+// Caps how much of a text response gets buffered for HTML/CSS rewriting, so a hostile or compromised upstream can't exhaust server memory with an oversized (or decompression-bomb) body; binary responses are streamed straight through instead and never hit this.
+const MAX_REWRITE_BODY_BYTES = 25 * 1024 * 1024;
+
+async function readTextWithLimit(response: globalThis.Response, limit: number): Promise<string | null> {
+  if (!response.body) return await response.text();
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.length;
+    if (total > limit) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks.map((c) => Buffer.from(c))).toString('utf8');
 }
 
 export async function handleProxy(req: Request, res: Response): Promise<void> {
@@ -175,6 +233,13 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
     return;
   }
 
+  // A GET <form> appends its own query string onto the proxied action URL, landing on our path rather than inside the encoded blob; re-attaching it here is what makes search boxes actually search instead of just reloading the homepage.
+  const rawQuery = req.url.includes('?') ? req.url.slice(req.url.indexOf('?') + 1) : '';
+  if (rawQuery) {
+    parsedTarget.search = parsedTarget.search ? `${parsedTarget.search}&${rawQuery}` : `?${rawQuery}`;
+    targetUrl = parsedTarget.href;
+  }
+
   if (parsedTarget.protocol !== 'http:' && parsedTarget.protocol !== 'https:') {
     res.status(400).type('text').send('Only http and https targets are supported.');
     return;
@@ -193,6 +258,24 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
   const requestHost = (req.headers['host'] as string | undefined)?.toLowerCase();
   if (requestHost && parsedTarget.host.toLowerCase() === requestHost) {
     res.status(200).type('html').send(renderSelfLoopPage());
+    return;
+  }
+
+  if (readFlagCookie(req.headers['cookie'] as string | undefined, 'w2_block_ads') && isAdRequest(parsedTarget)) {
+    respondBlocked(req, res, targetUrl);
+    return;
+  }
+
+  const isDocumentRequest = (req.headers['sec-fetch-dest'] as string | undefined ?? 'document') === 'document';
+  const rawCookie = req.headers['cookie'] as string | undefined;
+  for (const category of Object.keys(CATEGORY_COOKIES) as FilterCategory[]) {
+    if (!readFlagCookie(rawCookie, CATEGORY_COOKIES[category])) continue;
+    if (!isBlockedByCategory(parsedTarget.hostname, category)) continue;
+    if (isDocumentRequest) {
+      res.status(200).type('html').send(renderContentFilterPage(category, parsedTarget.hostname));
+    } else {
+      respondBlocked(req, res, targetUrl);
+    }
     return;
   }
 
@@ -232,6 +315,22 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
           return;
         }
 
+        if (readFlagCookie(rawCookie, 'w2_block_ads') && isAdRequest(next)) {
+          respondBlocked(req, res, next.href);
+          return;
+        }
+
+        for (const category of Object.keys(CATEGORY_COOKIES) as FilterCategory[]) {
+          if (!readFlagCookie(rawCookie, CATEGORY_COOKIES[category])) continue;
+          if (!isBlockedByCategory(next.hostname, category)) continue;
+          if (isDocumentRequest) {
+            res.status(200).type('html').send(renderContentFilterPage(category, next.hostname));
+          } else {
+            respondBlocked(req, res, next.href);
+          }
+          return;
+        }
+
         currentUrl = next.href;
         redirectCount++;
         requestHeaders = buildRequestHeaders(req, currentUrl);
@@ -260,10 +359,12 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
   if (setCookies.length > 0) {
     const nsPrefix = `${COOKIE_NS_PREFIX}${hashOrigin(new URL(finalUrl).origin)}_`;
     const rewritten = setCookies.map((cookie) => {
+      // Path is forced to "/" too, not just stripped, since our flat /w2/<blob> URLs have no correspondence to the original site's path hierarchy; a cookie left scoped to "/login" would never come back on any other proxied page, which is why things like cookie-consent choices kept resetting.
       const stripped = cookie
         .replace(/;\s*domain=[^;]*/gi, '')
-        .replace(/;\s*samesite=[^;]*/gi, '');
-      return namespaceSetCookie(stripped, nsPrefix);
+        .replace(/;\s*samesite=[^;]*/gi, '')
+        .replace(/;\s*path=[^;]*/gi, '');
+      return `${namespaceSetCookie(stripped, nsPrefix)}; Path=/`;
     });
     res.setHeader('set-cookie', rewritten);
   }
@@ -274,14 +375,22 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
   const contentType = response.headers.get('content-type') ?? '';
 
   if (contentType.includes('text/html')) {
-    const html = await response.text();
+    const html = await readTextWithLimit(response, MAX_REWRITE_BODY_BYTES);
+    if (html === null) {
+      res.status(502).type('text').send('Upstream response was too large to process.');
+      return;
+    }
     res.setHeader('content-type', 'text/html; charset=utf-8');
     res.send(rewriteHtml(html, finalUrl));
     return;
   }
 
   if (contentType.includes('text/css')) {
-    const css = await response.text();
+    const css = await readTextWithLimit(response, MAX_REWRITE_BODY_BYTES);
+    if (css === null) {
+      res.status(502).type('text').send('Upstream response was too large to process.');
+      return;
+    }
     res.setHeader('content-type', contentType);
     res.send(rewriteCss(css, finalUrl));
     return;

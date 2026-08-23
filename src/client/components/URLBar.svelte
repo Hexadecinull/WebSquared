@@ -16,12 +16,25 @@
   } = $props();
 
   let inputValue = $state('');
-
-  $effect(() => { inputValue = url ?? ''; });
   let focused = $state(false);
+  let inputEl = $state<HTMLInputElement>();
+
+  export function focusInput() {
+    inputEl?.focus();
+  }
+
+  function displayValue(full: string): string {
+    return full.replace(/^https?:\/\//i, '');
+  }
+
+  // Only re-derive the idle (scheme-stripped) display while the field isn't
+  // being edited, so typing or a focused selection is never clobbered.
+  $effect(() => {
+    if (!focused) inputValue = displayValue(url ?? '');
+  });
+
   let suggestions = $state<import('../stores/history').HistoryEntry[]>([]);
   let selectedIndex = $state(-1);
-
 
   let blockedMessage = $state('');
   let blockedTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -92,7 +105,11 @@
 
   function onFocus(e: FocusEvent) {
     focused = true;
-    (e.currentTarget as HTMLInputElement).select();
+    const full = url ?? '';
+    inputValue = full;
+    const el = e.currentTarget as HTMLInputElement;
+    el.value = full;
+    el.select();
   }
 
   function onBlur() {
@@ -111,6 +128,7 @@
       <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
     </svg>
     <input
+      bind:this={inputEl}
       type="text"
       placeholder="Enter a URL or search..."
       value={inputValue}

@@ -1,6 +1,6 @@
 # Self-hosting WebSquared
 
-This guide covers running WebSquared on your own server — a VPS, a home
+This guide covers running WebSquared on your own server, a VPS, a home
 server, whatever you've got. It needs a real Node.js process running
 continuously (not static hosting, not serverless functions), because it
 proxies live traffic and runs a WebSocket server.
@@ -16,7 +16,7 @@ domain and install path.
 - Node.js **20 or newer** (Node 22/24 work fine too)
 - A domain name pointed at your server
 
-## 1 — Install Node.js and PM2
+## 1. Install Node.js and PM2
 
 If you don't already have Node.js:
 
@@ -32,7 +32,7 @@ crashes, and starts it automatically on reboot:
 sudo npm install -g pm2
 ```
 
-## 2 — Get the code
+## 2. Get the code
 
 ```bash
 sudo mkdir -p /opt/websquared
@@ -41,14 +41,14 @@ git clone https://github.com/Hexadecinull/WebSquared /opt/websquared
 cd /opt/websquared
 ```
 
-**Don't run `npm` or `git` with `sudo`** past this point — it leaves files
+**Don't run `npm` or `git` with `sudo`** past this point. It leaves files
 owned by `root` and breaks future commands run as your normal user. If you
 ever do this by accident, fix it with:
 ```bash
 sudo chown -R $USER:$USER /opt/websquared
 ```
 
-## 3 — Install dependencies and build
+## 3. Install dependencies and build
 
 ```bash
 npm ci
@@ -57,13 +57,13 @@ npm run build
 
 This runs three steps: builds the Svelte frontend (Vite), bundles the two
 worker scripts as standalone files (esbuild), then compiles the backend
-(TypeScript). All three need to succeed — if `npm run build` errors, don't
+(TypeScript). All three need to succeed, if `npm run build` errors, don't
 continue until it's clean.
 
-## 4 — Start it with PM2
+## 4. Start it with PM2
 
 The included `ecosystem.config.cjs` runs WebSquared on port `3003` by
-default — change the `PORT` value in that file first if you'd rather use
+default, change the `PORT` value in that file first if you'd rather use
 a different port.
 
 ```bash
@@ -78,14 +78,14 @@ pm2 status
 curl http://localhost:3003/healthz   # should print "OK"
 ```
 
-## 5 — Make it reachable from the internet
+## 5. Make it reachable from the internet
 
 Pick whichever of these fits your setup. **Cloudflare Tunnel** is the easier
-option if your domain's DNS is already on Cloudflare — no ports to open, no
+option if your domain's DNS is already on Cloudflare, no ports to open, no
 certificates to manage. If you'd rather run a traditional reverse proxy,
 use the **nginx + Let's Encrypt** option instead.
 
-### Option A — Cloudflare Tunnel (recommended)
+### Option A, Cloudflare Tunnel (recommended)
 
 ```bash
 curl -L https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg > /dev/null
@@ -117,10 +117,10 @@ sudo systemctl enable --now cloudflared
 
 In the Cloudflare dashboard, set the DNS record for your domain to
 **Proxied** (orange cloud) and set SSL/TLS mode to **Full**. No firewall
-rules or port forwarding are needed — the tunnel makes an outbound
+rules or port forwarding are needed, the tunnel makes an outbound
 connection from your server, so nothing needs to be opened on your router.
 
-### Option B — nginx + Let's Encrypt
+### Option B, nginx + Let's Encrypt
 
 ```bash
 sudo apt-get install -y nginx certbot python3-certbot-nginx
@@ -152,10 +152,10 @@ sudo ufw allow 80 && sudo ufw allow 443   # if ufw is active
 sudo certbot --nginx -d yourdomain.com
 ```
 
-Certbot edits the config in place to add the HTTPS block and cert paths —
+Certbot edits the config in place to add the HTTPS block and cert paths,
 no manual editing needed.
 
-## 6 — Optional: auto-deploy on push
+## 6. Optional: auto-deploy on push
 
 If you'd rather not manually rebuild and restart after every commit,
 `scripts/deploy-webhook.mjs` is a small listener that lets GitHub trigger
@@ -175,13 +175,13 @@ pm2 start ecosystem.config.cjs
 pm2 save
 ```
 
-Expose it through whichever routing option you chose in step 5 — the
+Expose it through whichever routing option you chose in step 5, the
 listener runs on `localhost:9000` (only bound to localhost) and needs to be
 reachable at a specific path, e.g. `/_deploy-hook`, without interfering
 with the main app's catch-all route.
 
 **Cloudflare Tunnel:** add this rule to `config.yml` *above* the main
-hostname rule (path-matched rules must come before the catch-all — first
+hostname rule (path-matched rules must come before the catch-all, first
 match wins):
 ```yaml
   - hostname: yourdomain.com
@@ -205,7 +205,7 @@ Then `sudo nginx -t && sudo systemctl reload nginx`.
 - Secret: the same value from your `.env`
 - Events: **Just the push event**
 
-GitHub sends a `ping` immediately on save — check **Recent Deliveries** for
+GitHub sends a `ping` immediately on save, check **Recent Deliveries** for
 a `200` response. From then on, every push to `main` runs:
 ```
 git fetch → git reset --hard origin/main → npm ci → npm run build → pm2 restart websquared
@@ -213,7 +213,7 @@ git fetch → git reset --hard origin/main → npm ci → npm run build → pm2 
 If the build fails at any step, the chain stops there and the
 currently-running (last good) version is left untouched.
 
-## 7 — Manual deploy / updating
+## 7. Manual deploy / updating
 
 If you don't set up the webhook, or just want to deploy on demand:
 ```bash
@@ -228,14 +228,13 @@ pm2 restart websquared
 
 ## Troubleshooting
 
-- **`pm2 status` shows `errored` with 0b memory and rising restart count** —
-  the process is crashing on startup. Run it directly to see the real
+- **`pm2 status` shows `errored` with 0b memory and rising restart count**: the process is crashing on startup. Run it directly to see the real
   error: `node dist-server/server/index.js` (or, for the webhook,
   `node --env-file=.env scripts/deploy-webhook.mjs`).
-- **PM2 apps show `cluster` mode instead of `fork`** — delete and restart
+- **PM2 apps show `cluster` mode instead of `fork`**: delete and restart
   them fresh; PM2 doesn't apply `exec_mode` changes to an already-running
   process via `restart` alone: `pm2 delete websquared && pm2 start ecosystem.config.cjs`.
-- **`git pull` refuses with "local changes would be overwritten"** — something
+- **`git pull` refuses with "local changes would be overwritten"**: something
   was edited directly on the server without being committed. Either commit
   it (`git add . && git commit`) or discard it (`git checkout -- <file>`)
   before pulling.

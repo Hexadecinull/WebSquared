@@ -1,10 +1,10 @@
-export function renderSelfLoopPage(): string {
+function pageShell(title: string, heading: string, message: string): string {
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Nice try — WebSquared</title>
+<title>${title}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
@@ -30,9 +30,32 @@ export function renderSelfLoopPage(): string {
 <body>
   <div class="card">
     <div class="logo"><span></span><span></span><span></span><span></span></div>
-    <h1>Caught you red handed, little prankster!</h1>
-    <p>WebSquared can't be proxied through itself — that would just load an endless copy of this page inside itself. Try browsing to a different site instead.</p>
+    <h1>${heading}</h1>
+    <p>${message}</p>
   </div>
 </body>
 </html>`;
+}
+
+export function renderSelfLoopPage(): string {
+  return pageShell(
+    'Nice try, WebSquared',
+    'Caught you red handed, little prankster!',
+    "WebSquared can't be proxied through itself, that would just load an endless copy of this page inside itself. Try browsing to a different site instead."
+  );
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  adult: 'adult content',
+  gambling: 'gambling',
+  malware: 'malicious or phishing sites',
+};
+
+export function renderContentFilterPage(category: string, hostname: string): string {
+  const label = CATEGORY_LABELS[category] ?? 'this category';
+  return pageShell(
+    'Blocked by content filter, WebSquared',
+    'This site is blocked',
+    `${hostname} is blocked by your "Block ${label}" filter. Turn it off in Settings > Browsing if you didn't mean to block it.`
+  );
 }

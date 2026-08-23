@@ -1,5 +1,6 @@
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import { toProxyUrl } from '../../shared/url';
+import { settings } from './settings';
 
 export interface Tab {
   id: string;
@@ -19,6 +20,15 @@ function makeId(): string {
   return Math.random().toString(36).slice(2, 9);
 }
 
+// Enforced here, not just in URLBar, so every navigation path is covered the same way on every platform.
+function isSelfReferential(target: string): boolean {
+  try {
+    return new URL(target).hostname.toLowerCase() === window.location.hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
 function makeTab(url = '', proxySrc = '', priv = false): Tab {
   return {
     id: makeId(),
@@ -33,7 +43,9 @@ function makeTab(url = '', proxySrc = '', priv = false): Tab {
   };
 }
 
+// Off by default so WebSquared opens to a clean slate; opt in via Settings > Data & Privacy > Remember open tabs.
 function loadPersistedTabs(): Tab[] {
+  if (!get(settings).restoreTabsOnStartup) return [makeTab()];
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [makeTab()];
@@ -46,13 +58,18 @@ function loadPersistedTabs(): Tab[] {
 }
 
 function persistTabs(tabList: Tab[]) {
+  if (!get(settings).restoreTabsOnStartup) return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(tabList.filter((t) => !t.private)));
   } catch { /* ignore quota errors */ }
 }
 
-// Returns the same reference on a no-op patch so Svelte's store skips
-// notifying subscribers, preventing needless re-renders.
+// Called when the user turns "Remember open tabs" off, so a stale snapshot can't reappear if it's turned back on later.
+function forgetPersistedTabs() {
+  try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+}
+
+// Returns the same reference on a no-op patch so Svelte's store skips notifying subscribers.
 function patchTab(tabList: Tab[], id: string, patch: Partial<Tab>): Tab[] {
   const idx = tabList.findIndex((t) => t.id === id);
   if (idx === -1) return tabList;
@@ -84,6 +101,7 @@ function createTabStore() {
     activeId: { subscribe: activeId.subscribe },
 
     openTab(url = '', priv = false) {
+      if (url && isSelfReferential(url)) url = '';
       const proxySrc = url ? toProxyUrl(url) : '';
       const tab = makeTab(url, proxySrc, priv);
       update((tabList) => [...tabList, tab]);
@@ -109,6 +127,7 @@ function createTabStore() {
     },
 
     navigate(id: string, url: string) {
+      if (isSelfReferential(url)) return;
       const proxySrc = toProxyUrl(url);
       update((tabList) =>
         tabList.map((t) => {
@@ -140,6 +159,8 @@ function createTabStore() {
       set([makeTab()]);
       activeId.set('');
     },
+
+    forgetPersisted: forgetPersistedTabs,
   };
 }
 

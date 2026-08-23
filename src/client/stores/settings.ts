@@ -1,31 +1,46 @@
 import { writable } from 'svelte/store';
 
 export interface Settings {
-  theme: 'dark' | 'light' | 'system';
+  theme: 'dark' | 'light' | 'system' | 'amoled';
+  accent: string;
+  deeperAccent: boolean;
   desktopMode: boolean;
-  searchEngine: 'google' | 'bing' | 'duckduckgo' | 'brave' | 'ecosia';
+  searchEngine: 'google' | 'bing' | 'duckduckgo' | 'brave' | 'ecosia' | 'qwant';
   newTabPage: 'default' | 'blank';
   fontSize: 'small' | 'medium' | 'large';
   smoothScrolling: boolean;
   blockAds: boolean;
+  blockAdult: boolean;
+  blockGambling: boolean;
+  blockMalware: boolean;
   saveHistory: boolean;
   openLinksInNewTab: boolean;
   devToolsEnabled: boolean;
+  restoreTabsOnStartup: boolean;
 }
 
 const STORAGE_KEY = 'w2_settings';
 
+export const DEFAULT_ACCENT = '#4f8ef7';
+
 const DEFAULTS: Settings = {
   theme: 'dark',
+  accent: DEFAULT_ACCENT,
+  deeperAccent: false,
   desktopMode: false,
   searchEngine: 'google',
   newTabPage: 'default',
   fontSize: 'medium',
   smoothScrolling: true,
   blockAds: false,
+  // On by default since this protects the server and visitor from known malicious/phishing domains, unlike the personal-preference filters below.
+  blockAdult: false,
+  blockGambling: false,
+  blockMalware: true,
   saveHistory: true,
   openLinksInNewTab: false,
   devToolsEnabled: false,
+  restoreTabsOnStartup: false,
 };
 
 export const SEARCH_URLS: Record<Settings['searchEngine'], string> = {
@@ -34,6 +49,7 @@ export const SEARCH_URLS: Record<Settings['searchEngine'], string> = {
   duckduckgo: 'https://duckduckgo.com/?q=',
   brave: 'https://search.brave.com/search?q=',
   ecosia: 'https://www.ecosia.org/search?q=',
+  qwant: 'https://www.qwant.com/?q=',
 };
 
 export const FONT_SIZE_MAP: Record<Settings['fontSize'], string> = {

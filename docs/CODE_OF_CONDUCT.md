@@ -2,8 +2,8 @@
 
 ## Our commitment
 
-We want participation in WebSquared — through issues, pull requests,
-discussions, or any other project space — to be a welcoming, harassment-free
+We want participation in WebSquared, through issues, pull requests,
+discussions, or any other project space, to be a welcoming, harassment-free
 experience for everyone, regardless of age, body size, disability,
 ethnicity, gender identity and expression, level of experience, nationality,
 personal appearance, race, religion, or sexual identity and orientation.
@@ -14,7 +14,7 @@ personal appearance, race, religion, or sexual identity and orientation.
   disagreeing about technical decisions.
 - Give constructive feedback, and accept it gracefully in return.
 - Focus criticism on code and ideas, not people.
-- Assume good faith — most misunderstandings come from missing context,
+- Assume good faith, most misunderstandings come from missing context,
   not bad intent.
 
 ## Unacceptable behavior
@@ -28,9 +28,9 @@ personal appearance, race, religion, or sexual identity and orientation.
 
 ## Scope
 
-This applies to all project spaces — the GitHub repository (issues, pull
+This applies to all project spaces, the GitHub repository (issues, pull
 requests, discussions), and any other official communication channels
-associated with the project — and also applies when someone is
+associated with the project, and also applies when someone is
 representing the project in public spaces elsewhere.
 
 ## Enforcement
