@@ -245,7 +245,8 @@ document.addEventListener('click', (e) => {
   const a = (e.target as Element)?.closest('a');
   if (!a) return;
   const href = a.getAttribute('href');
-  if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+  const normalizedHref = href?.trim().toLowerCase();
+  if (!href || href.startsWith('#') || normalizedHref?.startsWith('javascript:') || normalizedHref?.startsWith('data:') || normalizedHref?.startsWith('vbscript:')) return;
   // A download link's href is already proxied (server-side rewriting, or
   // the anchor/attribute patches above for JS-created links), so it's
   // same-origin; let the browser's native download behavior handle it
