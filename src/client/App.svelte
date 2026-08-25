@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
+  import { fade, fly } from 'svelte/transition';
   import { tabs, activeTab } from './stores/tabs';
   import { bookmarks } from './stores/bookmarks';
   import { settings, FONT_SIZE_MAP, isMobile } from './stores/settings';
@@ -72,6 +73,9 @@
       w2_block_adult: $settings.blockAdult,
       w2_block_gambling: $settings.blockGambling,
       w2_block_malware: $settings.blockMalware,
+      w2_block_clickbait: $settings.blockClickbait,
+      w2_verbose: $settings.verboseLogging,
+      w2_debug_helpers: $settings.exposeDebugHelpers,
     };
     for (const [name, on] of Object.entries(flags)) {
       document.cookie = `${name}=${on ? '1' : '0'}; path=/; max-age=31536000; samesite=lax`;
@@ -221,8 +225,8 @@
   </header>
 
   {#if mobile && mobileSearchOpen}
-    <div class="mobile-search-scrim" onclick={closeMobileSearch} role="presentation"></div>
-    <div class="mobile-search-panel">
+    <div class="mobile-search-scrim" onclick={closeMobileSearch} role="presentation" transition:fade={{ duration: 120 }}></div>
+    <div class="mobile-search-panel" transition:fly={{ y: -8, duration: 160 }}>
       <URLBar
         bind:this={mobileUrlBarRef}
         url={$activeTab?.url ?? ''}
@@ -272,7 +276,7 @@
 </div>
 
 {#if showSettings}
-  <SettingsPanel onClose={() => { showSettings = false; }} />
+  <SettingsPanel onClose={() => { showSettings = false; }} onNavigate={(url) => { navigate(url); showSettings = false; }} />
 {/if}
 
 {#if $settings.devToolsEnabled}
@@ -332,9 +336,10 @@
     display: flex; align-items: center; justify-content: center;
     width: 2rem; height: 2rem; border-radius: 6px;
     border: none; background: transparent; color: var(--text-2); cursor: pointer;
-    transition: background 0.15s, color 0.15s;
+    transition: background 0.15s, color 0.15s, transform 0.1s;
   }
   .icon-btn:hover { background: var(--surface-2); color: var(--text-1); }
+  .icon-btn:active { transform: scale(0.9); }
   .icon-btn svg { width: 1rem; height: 1rem; }
 
   .search-toggle {

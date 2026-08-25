@@ -85,6 +85,14 @@ option if your domain's DNS is already on Cloudflare, no ports to open, no
 certificates to manage. If you'd rather run a traditional reverse proxy,
 use the **nginx + Let's Encrypt** option instead.
 
+Either way, once you know your real public domain, set `PUBLIC_HOSTNAMES`
+in `ecosystem.config.cjs` to it and restart with `pm2 restart websquared`.
+Both options below sit in front of the Node process and can rewrite or
+drop the `Host` header before it reaches WebSquared, and one specific
+thing depends on that header being correct: detecting "the proxy is being
+asked to proxy itself." `PUBLIC_HOSTNAMES` gives that check a reliable
+answer regardless of what the reverse proxy/tunnel does to the header.
+
 ### Option A, Cloudflare Tunnel (recommended)
 
 ```bash

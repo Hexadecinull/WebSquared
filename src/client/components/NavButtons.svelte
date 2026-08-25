@@ -46,9 +46,10 @@
     display: flex; align-items: center; justify-content: center;
     width: 2rem; height: 2rem; border-radius: 6px;
     border: none; background: transparent; color: var(--text-2);
-    cursor: pointer; transition: background 0.15s, color 0.15s;
+    cursor: pointer; transition: background 0.15s, color 0.15s, transform 0.1s;
   }
   button:hover:not(:disabled) { background: var(--surface-2); color: var(--text-1); }
+  button:active:not(:disabled) { transform: scale(0.9); }
   button:disabled { opacity: 0.3; cursor: default; }
   button svg { width: 1rem; height: 1rem; }
 </style>

@@ -18,6 +18,13 @@ module.exports = {
         NODE_ENV: 'production',
         // Change this if you want WebSquared on a different port; just make sure your reverse proxy/tunnel config points at the same number.
         PORT: 3003,
+        // Your real public domain(s), comma-separated. Used only to detect
+        // "the proxy is being asked to proxy itself" reliably; without
+        // this, that check falls back to the incoming Host header, which a
+        // reverse proxy or tunnel in front of this process can rewrite or
+        // drop before it ever reaches Node. Set this to whatever domain(s)
+        // you actually put in front of WebSquared (see DEPLOY.md).
+        PUBLIC_HOSTNAMES: 'websquared.example.com',
       },
     },
     {

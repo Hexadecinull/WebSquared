@@ -49,6 +49,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   adult: 'adult content',
   gambling: 'gambling',
   malware: 'malicious or phishing sites',
+  clickbait: 'clickbait and low-quality content',
 };
 
 export function renderContentFilterPage(category: string, hostname: string): string {

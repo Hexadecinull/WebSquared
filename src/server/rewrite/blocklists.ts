@@ -1,20 +1,27 @@
 // Optional, user-controlled content filters that block whole categories of sites rather than unlock them (malware defaults on since it protects the server, not just personal preference); sources are hosts-file-format lists like uBlock/Pi-hole/AdGuard Home use, refreshed daily, and a stale/unreachable source just keeps its last-loaded copy instead of blocking everything.
 
-export type FilterCategory = 'adult' | 'gambling' | 'malware';
+export type FilterCategory = 'adult' | 'gambling' | 'malware' | 'clickbait';
 
 const LIST_SOURCES: Record<FilterCategory, string[]> = {
-  adult: ['https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/porn/hosts'],
-  gambling: ['https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/gambling/hosts'],
+  adult: ['https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/porn-only/hosts'],
+  gambling: ['https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/gambling-only/hosts'],
   malware: [
     'https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-hosts.txt',
     'https://malware-filter.gitlab.io/malware-filter/phishing-filter-hosts.txt',
   ],
+  // "Clickbait" isn't a domain property a hosts-file can capture directly (that would need judging each headline/thumbnail in real time), so this uses the closest real, maintained list instead: known fake-news and content-farm domains, the same sites clickbait overwhelmingly comes from in practice.
+  clickbait: ['https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews-only/hosts'],
 };
 
 const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 15000;
 
-const lists: Record<FilterCategory, Set<string>> = { adult: new Set(), gambling: new Set(), malware: new Set() };
+const lists: Record<FilterCategory, Set<string>> = {
+  adult: new Set(),
+  gambling: new Set(),
+  malware: new Set(),
+  clickbait: new Set(),
+};
 
 function parseHostsFile(text: string): string[] {
   const domains: string[] = [];

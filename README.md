@@ -3,7 +3,8 @@
 An ad-free, open-source, lightweight web proxy. Browse freely from anywhere, no extensions, no installs, no ads.
 
 [![CI](https://github.com/Hexadecinull/WebSquared/actions/workflows/ci.yml/badge.svg)](https://github.com/Hexadecinull/WebSquared/actions/workflows/ci.yml)
-[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
+[![CodeQL](https://github.com/Hexadecinull/WebSquared/actions/workflows/codeql.yml/badge.svg)](https://github.com/Hexadecinull/WebSquared/actions/workflows/codeql.yml)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
 ---
 
@@ -69,19 +70,12 @@ GitHub auto-deploy webhook so pushing to `main` deploys itself.
 
 ## Documentation
 
-- [Usage guide](docs/USAGE.md): how to use every feature
-- [Architecture](docs/ARCHITECTURE.md): how the project actually works
-- [Deployment](docs/DEPLOY.md): self-hosting guide
-- [Contributing](docs/CONTRIBUTING.md): how to contribute
-- [Security policy](docs/SECURITY.md): reporting vulnerabilities, current defenses
-- [Privacy policy](docs/PRIVACY.md)
-- [Terms of Service](docs/TERMS.md)
-- [Code of Conduct](docs/CODE_OF_CONDUCT.md)
+See [docs/README.md](docs/README.md) for the full documentation index: usage, self-hosting, architecture, contributing, and policies.
 
 ## Contributing
 
-Pull requests are welcome, see [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines. All contributions are made under the GPL-3.0 license.
+Pull requests are welcome, see [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines. All contributions are made under the AGPL-3.0 license.
 
 ## License
 
-[GNU General Public License v3.0](LICENSE) © 2026 SSMG4 and contributors
+[GNU Affero General Public License v3.0](LICENSE) © 2026 SSMG4 and contributors

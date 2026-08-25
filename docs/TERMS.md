@@ -47,6 +47,6 @@ file's Git history.
 
 ## License
 
-WebSquared's source code is licensed under [GPL-3.0](../LICENSE). These
+WebSquared's source code is licensed under [AGPL-3.0](../LICENSE). These
 Terms of Service govern *use* of a running instance and are separate from
 the license governing the *code*.

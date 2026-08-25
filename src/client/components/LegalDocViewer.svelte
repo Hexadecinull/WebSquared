@@ -12,7 +12,7 @@
 </script>
 
 {#snippet inline(segments: InlineSegment[])}
-  {#each segments as seg}
+  {#each segments as seg, i (i)}
     {#if seg.type === 'bold'}<strong>{seg.text}</strong>
     {:else if seg.type === 'code'}<code>{seg.text}</code>
     {:else if seg.type === 'link'}<a href={seg.href} target="_blank" rel="noopener noreferrer">{seg.text}</a>
@@ -33,7 +33,7 @@
     </button>
   </header>
   <div class="doc-body">
-    {#each blocks as block}
+    {#each blocks as block, i (i)}
       {#if block.type === 'heading'}
         {#if block.level === 2}<h3>{@render inline(block.segments)}</h3>
         {:else if block.level === 3}<h4>{@render inline(block.segments)}</h4>
@@ -42,10 +42,12 @@
         <p>{@render inline(block.segments)}</p>
       {:else if block.type === 'list'}
         <ul>
-          {#each block.items as item}
+          {#each block.items as item, j (j)}
             <li>{@render inline(item)}</li>
           {/each}
         </ul>
+      {:else if block.type === 'code-block'}
+        <pre>{block.text}</pre>
       {/if}
     {/each}
   </div>
@@ -84,6 +86,12 @@
   .doc-body :global(code) {
     background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px;
     padding: 0.1rem 0.3rem; font-family: 'SF Mono', Consolas, monospace; font-size: 0.82em;
+  }
+  .doc-body :global(pre) {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 0.75rem 0.9rem; margin: 0 0 0.75rem; overflow-x: auto;
+    font-family: 'SF Mono', Consolas, monospace; font-size: 0.76em; line-height: 1.5;
+    white-space: pre; color: var(--text-1);
   }
 
   @media (max-width: 640px) {

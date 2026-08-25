@@ -3,6 +3,8 @@
   import { flip } from 'svelte/animate';
   import { history } from '../stores/history';
 
+  let { onNavigate }: { onNavigate?: (url: string) => void } = $props();
+
   let query = $state('');
 
   let filtered = $derived(
@@ -41,7 +43,12 @@
   {:else}
     <ul class="entries">
       {#each filtered as entry (entry.url)}
-        <li transition:fade={{ duration: 120 }} animate:flip={{ duration: 150 }}>
+        <li
+          transition:fade={{ duration: 120 }}
+          animate:flip={{ duration: 150 }}
+          ondblclick={() => onNavigate?.(entry.url)}
+          title={onNavigate ? 'Double-click to revisit' : undefined}
+        >
           {#if entry.favicon}
             <img src={entry.favicon} alt="" width="14" height="14" />
           {:else}
@@ -76,7 +83,7 @@
     display: flex; align-items: center; gap: 0.55rem;
     padding: 0.45rem 0.5rem; border-radius: 6px;
   }
-  li:hover { background: var(--surface-2); }
+  li:hover { background: var(--surface-2); cursor: pointer; }
   li img, .favicon-placeholder { width: 14px; height: 14px; flex-shrink: 0; }
   .entry-text { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   .entry-title { font-size: 0.8rem; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

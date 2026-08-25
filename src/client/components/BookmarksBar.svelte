@@ -33,8 +33,9 @@
     border: none; background: transparent; color: var(--text-2);
     font-size: 0.75rem; font-family: inherit; cursor: pointer;
     white-space: nowrap; max-width: 160px;
-    transition: background 0.1s, color 0.1s;
+    transition: background 0.1s, color 0.1s, transform 0.1s;
   }
-  button:hover { background: var(--surface-2); color: var(--text-1); }
+  button:hover { background: var(--surface-2); color: var(--text-1); transform: translateY(-1px); }
+  button:active { transform: translateY(0) scale(0.96); }
   span { overflow: hidden; text-overflow: ellipsis; }
 </style>

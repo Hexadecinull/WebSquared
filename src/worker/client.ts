@@ -3,6 +3,17 @@ import { toProxyUrl, fromProxyPath, PREFIX } from '../shared/url';
 const realUrl: string = (window as unknown as Record<string, string>)['__W2_URL__'] ?? location.href;
 const proxyOrigin = location.origin;
 
+// Developer settings live in localStorage on the main app, mirrored onto plain cookies (see App.svelte); this reads that same origin-wide cookie jar directly, since /w2/ pages share it with the main app.
+function hasFlagCookie(name: string): boolean {
+  return document.cookie.split(';').some((pair) => pair.trim() === `${name}=1`);
+}
+const verbose = hasFlagCookie('w2_verbose');
+const debugHelpersEnabled = hasFlagCookie('w2_debug_helpers');
+
+function verboseLog(...args: unknown[]): void {
+  if (verbose) console.debug('[w2]', ...args);
+}
+
 function resolveAgainstReal(url: string): string {
   try { return new URL(url, realUrl).href; } catch { return url; }
 }
@@ -23,6 +34,23 @@ function maybeProxy(url: string): string {
   if (!isProxiable(resolved)) return url;
   return toProxyUrl(resolved, realUrl);
 }
+
+// pushState/replaceState/location changes are what the service worker needs to hear about (see sw.ts): they're this page's notion of "current URL" changing, which client.url in the Clients API does not track on its own for SPA-style navigation, only on a real reload.
+function notifyServiceWorkerOfUrl(resolvedRealUrl: string): void {
+  try { navigator.serviceWorker?.controller?.postMessage({ type: 'w2-url-update', url: resolvedRealUrl }); } catch { /* no active controller yet; safe to ignore */ }
+}
+
+function maybeProxyAndNotify(url: string): string {
+  const resolved = resolveAgainstReal(url);
+  if (!isProxiable(resolved)) return url;
+  notifyServiceWorkerOfUrl(resolved);
+  const proxied = toProxyUrl(resolved, realUrl);
+  verboseLog('navigate', url, '->', resolved, '->', proxied);
+  return proxied;
+}
+
+// Also sent once up front, so the very first batch of subresource requests (before any pushState/replaceState happens) already has a live entry to work with instead of waiting for the first navigation.
+notifyServiceWorkerOfUrl(realUrl);
 
 interface DevtoolsConsoleEntry { type: string; args: string[]; time: number }
 interface DevtoolsNetworkEntry {
@@ -146,19 +174,21 @@ class PatchedWebSocket extends NativeWS {
 const _open = window.open.bind(window);
 window.open = function (url?: string | URL, target?: string, features?: string): WindowProxy | null {
   if (!url) return _open(url, target, features);
-  return _open(maybeProxy(typeof url === 'string' ? url : url.href), target, features);
+  const proxied = maybeProxy(typeof url === 'string' ? url : url.href);
+  verboseLog('window.open', url, '->', proxied);
+  return _open(proxied, target, features);
 };
 
 const _push = history.pushState.bind(history);
 history.pushState = function (data: unknown, unused: string, url?: string | URL | null): void {
   if (!url) { _push(data, unused, url); return; }
-  _push(data, unused, maybeProxy(typeof url === 'string' ? url : url.href));
+  _push(data, unused, maybeProxyAndNotify(typeof url === 'string' ? url : url.href));
 };
 
 const _replace = history.replaceState.bind(history);
 history.replaceState = function (data: unknown, unused: string, url?: string | URL | null): void {
   if (!url) { _replace(data, unused, url); return; }
-  _replace(data, unused, maybeProxy(typeof url === 'string' ? url : url.href));
+  _replace(data, unused, maybeProxyAndNotify(typeof url === 'string' ? url : url.href));
 };
 
 try {
@@ -226,6 +256,26 @@ try {
   Object.defineProperty(window, 'frameElement', { get() { return null; }, configurable: true });
 } catch { /* some browsers make these non-configurable; best-effort */ }
 
+// Anchor/attribute patches above only cover markup-driven navigation; a script that does `location.href = 'https://real-site.com/...'` (a common pattern for hotlink protection, paywalls, and geo-redirects) bypassed all of that entirely and loaded the real, unproxied site straight into the iframe, where it then got blocked by that site's own X-Frame-Options header.
+try {
+  const hrefDescriptor = Object.getOwnPropertyDescriptor(Location.prototype, 'href');
+  if (hrefDescriptor?.get && hrefDescriptor?.set) {
+    Object.defineProperty(Location.prototype, 'href', {
+      configurable: true,
+      get(this: Location) { return hrefDescriptor.get!.call(this); },
+      set(this: Location, value: string) { hrefDescriptor.set!.call(this, maybeProxyAndNotify(String(value))); },
+    });
+  }
+  const _assign = Location.prototype.assign;
+  Location.prototype.assign = function (this: Location, url: string | URL) {
+    return _assign.call(this, maybeProxyAndNotify(String(url)));
+  };
+  const _replaceLoc = Location.prototype.replace;
+  Location.prototype.replace = function (this: Location, url: string | URL) {
+    return _replaceLoc.call(this, maybeProxyAndNotify(String(url)));
+  };
+} catch { /* best-effort */ }
+
 // Set-Cookie headers already get Domain/Path normalized server-side, but document.cookie set straight from JS bypasses that, which is why cookie consent, logins, and similar state kept resetting on every visit.
 try {
   const cookieDescriptor = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie');
@@ -247,13 +297,21 @@ document.addEventListener('click', (e) => {
   const href = a.getAttribute('href');
   const normalizedHref = href?.trim().toLowerCase();
   if (!href || href.startsWith('#') || normalizedHref?.startsWith('javascript:') || normalizedHref?.startsWith('data:') || normalizedHref?.startsWith('vbscript:')) return;
-  // A download link's href is already proxied (server-side rewriting, or
-  // the anchor/attribute patches above for JS-created links), so it's
-  // same-origin; let the browser's native download behavior handle it
-  // instead of navigating the iframe to it.
+  // A download link's href is already proxied (server-side rewriting, or the anchor/attribute patches above for JS-created links), so it's same-origin; let the browser's native download behavior handle it instead of navigating the iframe to it.
   if (a.hasAttribute('download')) return;
   const resolved = resolveAgainstReal(href);
   if (!isProxiable(resolved)) return;
   e.preventDefault();
-  location.href = toProxyUrl(resolved, realUrl);
+  verboseLog('link click', href);
+  location.href = maybeProxyAndNotify(href);
 }, true);
+
+if (debugHelpersEnabled) {
+  (window as unknown as Record<string, unknown>)['__websquared'] = {
+    realUrl,
+    proxyOrigin,
+    resolveAgainstReal,
+    toProxyUrl: (url: string) => maybeProxy(url),
+  };
+  console.info('[w2] Debug helpers exposed on window.__websquared. Turn this off in Settings > Developer when done.');
+}

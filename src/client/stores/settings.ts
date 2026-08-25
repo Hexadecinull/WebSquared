@@ -13,9 +13,12 @@ export interface Settings {
   blockAdult: boolean;
   blockGambling: boolean;
   blockMalware: boolean;
+  blockClickbait: boolean;
   saveHistory: boolean;
   openLinksInNewTab: boolean;
   devToolsEnabled: boolean;
+  verboseLogging: boolean;
+  exposeDebugHelpers: boolean;
   restoreTabsOnStartup: boolean;
 }
 
@@ -37,9 +40,12 @@ const DEFAULTS: Settings = {
   blockAdult: false,
   blockGambling: false,
   blockMalware: true,
+  blockClickbait: false,
   saveHistory: true,
   openLinksInNewTab: false,
   devToolsEnabled: false,
+  verboseLogging: false,
+  exposeDebugHelpers: false,
   restoreTabsOnStartup: false,
 };
 

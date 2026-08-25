@@ -10,12 +10,15 @@
   import BookmarksManager from './BookmarksManager.svelte';
   import ConfirmDialog from './ConfirmDialog.svelte';
   import LegalDocViewer from './LegalDocViewer.svelte';
+  import ColorPicker from './ColorPicker.svelte';
   import termsDoc from '../../../docs/TERMS.md?raw';
   import privacyDoc from '../../../docs/PRIVACY.md?raw';
   import securityDoc from '../../../docs/SECURITY.md?raw';
   import conductDoc from '../../../docs/CODE_OF_CONDUCT.md?raw';
+  import architectureDoc from '../../../docs/ARCHITECTURE.md?raw';
+  import deployDoc from '../../../docs/DEPLOY.md?raw';
 
-  let { onClose }: { onClose: () => void } = $props();
+  let { onClose, onNavigate }: { onClose: () => void; onNavigate?: (url: string) => void } = $props();
 
   const mobile = isMobile();
 
@@ -28,6 +31,7 @@
 
   let pendingConfirm = $state<'history' | 'bookmarks' | 'reset' | null>(null);
   let openLegalDoc = $state<{ title: string; content: string } | null>(null);
+  let colorPickerOpen = $state(false);
 
   function confirmPending() {
     if (pendingConfirm === 'history') history.clear();
@@ -76,6 +80,8 @@
     </nav>
 
     <div class="category-content">
+      {#key activeCategory}
+      <div class="category-panel" in:fly={{ x: 8, duration: 140 }} out:fade={{ duration: 80 }}>
       {#if activeCategory === 'appearance'}
         <section>
           <label>
@@ -102,15 +108,22 @@
           <label>
             Accent
             <span class="accent-row">
-              <input
-                type="color"
+              <button
                 class="accent-swatch"
-                value={$settings.accent}
-                onchange={(e) => settings.set('accent', (e.currentTarget as HTMLInputElement).value)}
-                aria-label="Accent color"
-              />
+                style="background: {$settings.accent}"
+                onclick={() => (colorPickerOpen = !colorPickerOpen)}
+                aria-label="Choose accent color"
+                aria-haspopup="dialog"
+              ></button>
               {#if $settings.accent !== DEFAULT_ACCENT}
                 <button class="mini-reset" onclick={() => settings.set('accent', DEFAULT_ACCENT)}>Reset</button>
+              {/if}
+              {#if colorPickerOpen}
+                <ColorPicker
+                  value={$settings.accent}
+                  onChange={(hex) => settings.set('accent', hex)}
+                  onClose={() => (colorPickerOpen = false)}
+                />
               {/if}
             </span>
           </label>
@@ -154,6 +167,10 @@
             Block malicious &amp; phishing sites
             <Toggle checked={$settings.blockMalware} onChange={(v) => settings.set('blockMalware', v)} ariaLabel="Block malicious and phishing sites" />
           </label>
+          <label class="toggle-row">
+            Block clickbait &amp; low-quality content
+            <Toggle checked={$settings.blockClickbait} onChange={(v) => settings.set('blockClickbait', v)} ariaLabel="Block clickbait and low-quality content" />
+          </label>
           <p class="hint">These use community-maintained domain lists (in the same style as uBlock Origin's) and update automatically. Malicious/phishing blocking defaults on since it protects this server too, not just your browsing.</p>
           {#if mobile}
             <label class="toggle-row">
@@ -164,7 +181,7 @@
         </section>
       {:else if activeCategory === 'history'}
         <section>
-          <HistoryManager />
+          <HistoryManager onNavigate={onNavigate} />
           {#if $history.length > 0}
             <button class="danger-btn" onclick={() => (pendingConfirm = 'history')}>Clear all history</button>
           {/if}
@@ -204,6 +221,16 @@
               there's no built-in equivalent.
             {/if}
           </p>
+          <label class="toggle-row">
+            Verbose console logging
+            <Toggle checked={$settings.verboseLogging} onChange={(v) => settings.set('verboseLogging', v)} ariaLabel="Verbose console logging" />
+          </label>
+          <p class="hint">Logs every navigation WebSquared rewrites (links, redirects, pushState) to the real browser DevTools console of the page you're viewing, prefixed with [w2].</p>
+          <label class="toggle-row">
+            Expose debug helpers
+            <Toggle checked={$settings.exposeDebugHelpers} onChange={(v) => settings.set('exposeDebugHelpers', v)} ariaLabel="Expose debug helpers" />
+          </label>
+          <p class="hint">Attaches <code>window.__websquared</code> (real URL, proxy origin, and the URL-rewriting functions) to every proxied page, for poking around in the real DevTools console.</p>
         </section>
       {:else if activeCategory === 'about'}
         <section>
@@ -211,7 +238,38 @@
             <span class="online-dot"></span>
             <span>{$onlineCount} {$onlineCount === 1 ? 'person' : 'people'} online</span>
           </div>
-          <p class="about-line">WebSquared v{__APP_VERSION__}, GPL-3.0</p>
+
+          <p class="about-body">
+            WebSquared is a web proxy: point it at a site and it fetches, rewrites,
+            and streams that page back through this one server, so the page runs
+            as if it were served from here. No account, no data collection by
+            design, and no ads baked into the product itself.
+          </p>
+
+          <h4 class="about-heading">What it does</h4>
+          <ul class="about-list">
+            <li>Rewrites HTML, CSS, and JS on the fly so links, forms, cookies, and scripts keep working through the proxy</li>
+            <li>Optional ad, adult, gambling, malware/phishing, and clickbait filtering, using community-maintained domain lists that refresh automatically</li>
+            <li>Tabs, bookmarks, history, and private browsing, all kept locally in your browser rather than on the server</li>
+            <li>A built-in TCP tunnel (Wisp protocol) for traffic that needs a raw socket rather than plain HTTP</li>
+          </ul>
+
+          <h4 class="about-heading">Built with</h4>
+          <p class="about-body">
+            Svelte 5 and TypeScript on the frontend, Express on the backend, and
+            cheerio for HTML rewriting. See <button class="inline-link" onclick={() => (openLegalDoc = { title: 'Architecture', content: architectureDoc })}>Architecture</button>
+            for the full technical breakdown of how a request actually flows through the system.
+          </p>
+
+          <h4 class="about-heading">Self-hosting</h4>
+          <p class="about-body">
+            WebSquared is meant to be self-hosted. This instance is one of
+            (potentially many) independent deployments of the same open-source
+            project; see <button class="inline-link" onclick={() => (openLegalDoc = { title: 'Self-hosting WebSquared', content: deployDoc })}>the deploy guide</button>
+            if you'd like to run your own.
+          </p>
+
+          <p class="about-line">WebSquared v{__APP_VERSION__}, AGPL-3.0</p>
           <p class="about-line">Created by SSMG4 and contributors</p>
           <p class="about-line">
             <a href="https://github.com/Hexadecinull/WebSquared" target="_blank" rel="noopener noreferrer">GitHub →</a>
@@ -224,6 +282,8 @@
           </div>
         </section>
       {/if}
+      </div>
+      {/key}
     </div>
   </div>
 </div>
@@ -296,6 +356,7 @@
   .category-nav svg { width: 1rem; height: 1rem; flex-shrink: 0; }
 
   .category-content { flex: 1; overflow-y: auto; padding: 1.25rem 1.5rem; }
+  .category-panel { display: block; }
   section { display: flex; flex-direction: column; gap: 0.9rem; }
   label {
     display: flex; align-items: center; justify-content: space-between;
@@ -315,15 +376,36 @@
   }
   .danger-btn:hover { background: rgba(248, 81, 73, 0.1); }
   .hint { font-size: 0.78rem; color: var(--text-2); line-height: 1.5; margin-top: -0.4rem; }
+  .hint code {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px;
+    padding: 0.05rem 0.3rem; font-family: 'SF Mono', Consolas, monospace; font-size: 0.9em;
+  }
   .about-line { font-size: 0.8rem; color: var(--text-2); }
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
 
-  .accent-row { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+  .about-body { font-size: 0.82rem; color: var(--text-2); line-height: 1.6; margin: 0 0 0.4rem; }
+  .about-heading {
+    font-size: 0.75rem; font-weight: 700; color: var(--text-3);
+    text-transform: uppercase; letter-spacing: 0.04em; margin: 0.5rem 0 0.2rem;
+  }
+  .about-list {
+    display: flex; flex-direction: column; gap: 0.4rem; margin: 0 0 0.4rem 1.1rem;
+    font-size: 0.82rem; color: var(--text-2); line-height: 1.5;
+  }
+  .inline-link {
+    background: none; border: none; padding: 0; margin: 0; cursor: pointer;
+    color: var(--accent); font-size: inherit; font-family: inherit;
+    text-decoration: underline; text-underline-offset: 2px;
+  }
+  .inline-link:hover { color: var(--accent-hover); }
+
+  .accent-row { position: relative; display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
   .accent-swatch {
     width: 2rem; height: 1.5rem; padding: 0; border: 1px solid var(--border);
-    border-radius: 6px; background: transparent; cursor: pointer;
+    border-radius: 6px; cursor: pointer; transition: transform 0.1s;
   }
+  .accent-swatch:hover { transform: scale(1.06); }
   .mini-reset {
     border: none; background: transparent; color: var(--text-2);
     font-size: 0.72rem; cursor: pointer; text-decoration: underline;

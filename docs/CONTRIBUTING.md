@@ -73,4 +73,4 @@ locally before you push. They just catch what a local run might miss.
 ## License
 
 By contributing, you agree your contributions are licensed under the
-project's [GPL-3.0 license](../LICENSE).
+project's [AGPL-3.0 license](../LICENSE).

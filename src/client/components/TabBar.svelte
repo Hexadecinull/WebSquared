@@ -90,18 +90,20 @@
     display: flex; align-items: center; justify-content: center;
     width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0;
     color: var(--text-2); cursor: pointer;
-    opacity: 0; transition: opacity 0.15s, background 0.15s; outline: none;
+    opacity: 0; transition: opacity 0.15s, background 0.15s, transform 0.1s; outline: none;
   }
   .tab:hover .close, .tab.active .close { opacity: 1; }
   .close:hover { background: var(--border); color: var(--text-1); }
+  .close:active { transform: scale(0.85); }
   .close svg { width: 10px; height: 10px; }
   .new-tab {
     display: flex; align-items: center; justify-content: center;
     width: 28px; height: 28px; flex-shrink: 0;
     background: transparent; border: none; border-radius: 6px;
-    color: var(--text-2); cursor: pointer; transition: background 0.15s, color 0.15s;
+    color: var(--text-2); cursor: pointer; transition: background 0.15s, color 0.15s, transform 0.15s;
   }
-  .new-tab:hover { background: var(--surface-2); color: var(--text-1); }
+  .new-tab:hover { background: var(--surface-2); color: var(--text-1); transform: rotate(90deg); }
+  .new-tab:active { transform: rotate(90deg) scale(0.88); }
   .new-tab svg { width: 14px; height: 14px; }
   @keyframes spin { to { transform: rotate(360deg); } }
 </style>

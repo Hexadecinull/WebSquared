@@ -9,7 +9,8 @@ export type InlineSegment =
 export type Block =
   | { type: 'heading'; level: number; segments: InlineSegment[] }
   | { type: 'paragraph'; segments: InlineSegment[] }
-  | { type: 'list'; items: InlineSegment[][] };
+  | { type: 'list'; items: InlineSegment[][] }
+  | { type: 'code-block'; text: string };
 
 const INLINE_RE = /`([^`]+)`|\*\*([^*]+)\*\*|\[([^\]]+)\]\(([^)]+)\)/g;
 
@@ -32,6 +33,8 @@ export function parseMarkdown(md: string): Block[] {
   const lines = md.replace(/\r\n/g, '\n').split('\n');
   const blocks: Block[] = [];
   let currentList: InlineSegment[][] | null = null;
+  let inCodeBlock = false;
+  let codeLines: string[] = [];
 
   function closeList() {
     if (currentList) { blocks.push({ type: 'list', items: currentList }); currentList = null; }
@@ -39,6 +42,19 @@ export function parseMarkdown(md: string): Block[] {
 
   for (const rawLine of lines) {
     const line = rawLine.trimEnd();
+
+    if (line.trim().startsWith('```')) {
+      if (inCodeBlock) {
+        blocks.push({ type: 'code-block', text: codeLines.join('\n') });
+        codeLines = [];
+        inCodeBlock = false;
+      } else {
+        closeList();
+        inCodeBlock = true;
+      }
+      continue;
+    }
+    if (inCodeBlock) { codeLines.push(rawLine); continue; }
 
     if (!line.trim()) { closeList(); continue; }
 
@@ -60,6 +76,7 @@ export function parseMarkdown(md: string): Block[] {
     blocks.push({ type: 'paragraph', segments: parseInline(line) });
   }
 
+  if (inCodeBlock) blocks.push({ type: 'code-block', text: codeLines.join('\n') });
   closeList();
   return blocks;
 }

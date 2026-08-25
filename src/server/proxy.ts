@@ -28,18 +28,6 @@ const BLOCKED_RESPONSE_HEADERS = new Set([
   'set-cookie',
 ]);
 
-const ALLOWED_PROXY_HOSTS = new Set(
-  (process.env.PROXY_ALLOWED_HOSTS ?? '')
-    .split(',')
-    .map((h) => h.trim().toLowerCase())
-    .filter(Boolean),
-);
-
-function isAllowedTargetHostname(hostname: string): boolean {
-  if (ALLOWED_PROXY_HOSTS.size === 0) return false;
-  return ALLOWED_PROXY_HOSTS.has(hostname.toLowerCase());
-}
-
 // Forwarded by blocklist, not allowlist, since sites rely on custom headers; this excludes hop-by-hop headers, computed ones, and IP-leaking proxy metadata.
 const REQUEST_HEADER_BLOCKLIST = new Set([
   'host',
@@ -75,6 +63,19 @@ const REDIRECT_LIMIT = 5;
 
 // Cookies get namespaced per target origin so different proxied sites don't collide in the browser's one shared cookie jar.
 const COOKIE_NS_PREFIX = 'w2c_';
+
+// The incoming Host header is the primary self-loop signal, but a reverse proxy or tunnel in front of this process (nginx, Cloudflare Tunnel, both covered in DEPLOY.md) can rewrite or drop it before it gets here, silently disabling the guard; PUBLIC_HOSTNAMES lets an operator declare the real public hostname(s) as a second signal that doesn't depend on the Host header at all.
+const CONFIGURED_PUBLIC_HOSTNAMES = new Set(
+  (process.env.PUBLIC_HOSTNAMES ?? '')
+    .split(',')
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean),
+);
+
+function isSelfHostname(target: URL, requestHost: string | undefined): boolean {
+  if (CONFIGURED_PUBLIC_HOSTNAMES.has(target.hostname.toLowerCase())) return true;
+  return !!requestHost && target.host.toLowerCase() === requestHost;
+}
 
 function hashOrigin(origin: string): string {
   let hash = 0x811c9dc5;
@@ -202,6 +203,7 @@ const CATEGORY_COOKIES: Record<FilterCategory, string> = {
   adult: 'w2_block_adult',
   gambling: 'w2_block_gambling',
   malware: 'w2_block_malware',
+  clickbait: 'w2_block_clickbait',
 };
 
 // Caps how much of a text response gets buffered for HTML/CSS rewriting, so a hostile or compromised upstream can't exhaust server memory with an oversized (or decompression-bomb) body; binary responses are streamed straight through instead and never hit this.
@@ -253,39 +255,25 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
 
   if (parsedTarget.protocol === 'http:') parsedTarget.protocol = 'https:';
   if (parsedTarget.protocol !== 'https:') {
-    res.status(400).type('text').send('Only HTTP(S) targets are allowed.');
+    res.status(400).type('text').send('Only http(s) targets are supported.');
     return;
   }
-
-  if (isPrivateHostname(parsedTarget.hostname)) {
-    res.status(403).type('text').send('Proxying to private or internal addresses is not allowed.');
-    return;
-  }
-
-  if (!isAllowedTargetHostname(parsedTarget.hostname)) {
-    res.status(403).type('text').send('Proxying to this host is not allowed.');
-    return;
-  }
-
   targetUrl = parsedTarget.href;
 
-  if (parsedTarget.protocol !== 'http:' && parsedTarget.protocol !== 'https:') {
-    res.status(400).type('text').send('Only http and https targets are supported.');
-    return;
-  }
-
+  // The one and only SSRF gate: every target, on the initial request and on
+  // every redirect hop below, has its hostname checked here before it's
+  // ever handed to fetch(). An allowlist doesn't fit a general-purpose
+  // proxy (there's no fixed list of sites a user might want to visit), so
+  // this blocks the specific things that matter instead: loopback, private,
+  // and link-local addresses, including IPv6 forms that smuggle a private
+  // IPv4 address (see isPrivateHostname above).
   if (isPrivateHostname(parsedTarget.hostname)) {
     res.status(403).type('text').send('Proxying to private or internal addresses is not allowed.');
     return;
-  }
-
-  if (parsedTarget.protocol === 'http:') {
-    parsedTarget.protocol = 'https:';
-    targetUrl = parsedTarget.href;
   }
 
   const requestHost = (req.headers['host'] as string | undefined)?.toLowerCase();
-  if (requestHost && parsedTarget.host.toLowerCase() === requestHost) {
+  if (isSelfHostname(parsedTarget, requestHost)) {
     res.status(200).type('html').send(renderSelfLoopPage());
     return;
   }
@@ -295,7 +283,9 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const isDocumentRequest = (req.headers['sec-fetch-dest'] as string | undefined ?? 'document') === 'document';
+  // Every page load here happens inside our own <iframe>, so Sec-Fetch-Dest reports "iframe", never "document" (that's only for real top-level navigations), so checking only "document" meant a blocked page always silently fell through to the blank sub-resource handling below instead of showing the message.
+  const NAVIGATION_FETCH_DESTS = new Set(['document', 'iframe']);
+  const isDocumentRequest = NAVIGATION_FETCH_DESTS.has((req.headers['sec-fetch-dest'] as string | undefined) ?? 'document');
   const rawCookie = req.headers['cookie'] as string | undefined;
   for (const category of Object.keys(CATEGORY_COOKIES) as FilterCategory[]) {
     if (!readFlagCookie(rawCookie, CATEGORY_COOKIES[category])) continue;
@@ -334,18 +324,13 @@ export async function handleProxy(req: Request, res: Response): Promise<void> {
         const next = new URL(location, currentUrl);
         if (next.protocol === 'http:') next.protocol = 'https:';
 
-        if (requestHost && next.host.toLowerCase() === requestHost) {
+        if (isSelfHostname(next, requestHost)) {
           res.status(200).type('html').send(renderSelfLoopPage());
           return;
         }
 
         if (isPrivateHostname(next.hostname)) {
           res.status(403).type('text').send('Proxying to private or internal addresses is not allowed.');
-          return;
-        }
-
-        if (!isAllowedTargetHostname(next.hostname)) {
-          res.status(403).type('text').send('Proxying to this host is not allowed.');
           return;
         }
 
