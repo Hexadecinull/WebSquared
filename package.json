@@ -40,7 +40,7 @@
     "@types/ws": "^8.5.13",
     "concurrently": "10.0.5",
     "esbuild": "0.28.2",
-    "eslint": "10.8.1",
+    "eslint": "10.9.0",
     "eslint-plugin-svelte": "3.23.0",
     "globals": "17.11.0",
     "svelte": "5.56.10",
