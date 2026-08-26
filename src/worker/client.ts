@@ -10,6 +10,28 @@ function hasFlagCookie(name: string): boolean {
 const verbose = hasFlagCookie('w2_verbose');
 const debugHelpersEnabled = hasFlagCookie('w2_debug_helpers');
 
+function readCookieValue(name: string): string | null {
+  const match = document.cookie.split(';').map((p) => p.trim()).find((p) => p.startsWith(`${name}=`));
+  return match ? match.slice(name.length + 1) : null;
+}
+
+// CSS zoom isn't standard (Firefox doesn't implement it), so this falls back to a transform-based scale there, compensating the width so content doesn't get clipped on the right at scales above 100%.
+function applyPageZoom(): void {
+  const raw = readCookieValue('w2_zoom');
+  const percent = raw ? Number(raw) : 100;
+  if (!Number.isFinite(percent) || percent === 100) return;
+  const style = document.documentElement.style as unknown as Record<string, string>;
+  if ('zoom' in style) {
+    style['zoom'] = `${percent}%`;
+  } else {
+    const scale = percent / 100;
+    style['transform'] = `scale(${scale})`;
+    style['transformOrigin'] = '0 0';
+    style['width'] = `${10000 / percent}%`;
+  }
+}
+applyPageZoom();
+
 function verboseLog(...args: unknown[]): void {
   if (verbose) console.debug('[w2]', ...args);
 }

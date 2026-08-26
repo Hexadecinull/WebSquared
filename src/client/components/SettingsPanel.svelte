@@ -77,11 +77,12 @@
           <span>{cat.label}</span>
         </button>
       {/each}
+      <div class="nav-footer">WebSquared {__APP_VERSION__}</div>
     </nav>
 
     <div class="category-content">
       {#key activeCategory}
-      <div class="category-panel" in:fly={{ x: 8, duration: 140 }} out:fade={{ duration: 80 }}>
+      <div class="category-panel" transition:fade={{ duration: 120 }}>
       {#if activeCategory === 'appearance'}
         <section>
           <label>
@@ -101,6 +102,22 @@
               <option value="large">Large</option>
             </select>
           </label>
+          <label>
+            Page zoom
+            <select value={$settings.pageZoom} onchange={(e) => settings.set('pageZoom', Number((e.currentTarget as HTMLSelectElement).value))}>
+              <option value="50">50%</option>
+              <option value="67">67%</option>
+              <option value="75">75%</option>
+              <option value="90">90%</option>
+              <option value="100">100%</option>
+              <option value="110">110%</option>
+              <option value="125">125%</option>
+              <option value="150">150%</option>
+              <option value="175">175%</option>
+              <option value="200">200%</option>
+            </select>
+          </label>
+          <p class="hint">Zooms the content of sites you visit through WebSquared. Separate from Font size above, which only affects WebSquared's own interface.</p>
           <label class="toggle-row">
             Smooth scrolling
             <Toggle checked={$settings.smoothScrolling} onChange={(v) => settings.set('smoothScrolling', v)} ariaLabel="Smooth scrolling" />
@@ -150,6 +167,11 @@
             Open links in new tab
             <Toggle checked={$settings.openLinksInNewTab} onChange={(v) => settings.set('openLinksInNewTab', v)} ariaLabel="Open links in new tab" />
           </label>
+          <label class="toggle-row">
+            Site permissions (camera, mic, location...)
+            <Toggle checked={$settings.sitePermissions} onChange={(v) => settings.set('sitePermissions', v)} ariaLabel="Allow sites to request camera, microphone, location, and similar permissions" />
+          </label>
+          <p class="hint">Off by default. When on, sites can ask for camera, microphone, location, clipboard, and fullscreen access, same as in a normal browser (never payment or hardware access, those stay blocked either way). Since this runs through a proxy, a permission you grant applies to WebSquared broadly, not to one specific site.</p>
           <label class="toggle-row">
             Block ads
             <Toggle checked={$settings.blockAds} onChange={(v) => settings.set('blockAds', v)} ariaLabel="Block ads" />
@@ -234,9 +256,17 @@
         </section>
       {:else if activeCategory === 'about'}
         <section>
-          <div class="online-pill" title="People currently browsing through WebSquared">
-            <span class="online-dot"></span>
-            <span>{$onlineCount} {$onlineCount === 1 ? 'person' : 'people'} online</span>
+          <div class="about-header">
+            <svg class="about-logo" width="44" height="44" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="2" y="2" width="9" height="9" rx="1.5" fill="var(--accent)"/>
+              <rect x="13" y="2" width="9" height="9" rx="1.5" fill="var(--accent)" opacity="0.6"/>
+              <rect x="2" y="13" width="9" height="9" rx="1.5" fill="var(--accent)" opacity="0.6"/>
+              <rect x="13" y="13" width="9" height="9" rx="1.5" fill="var(--accent)"/>
+            </svg>
+            <div class="about-header-text">
+              <p class="about-title">Web² v{__APP_VERSION__}</p>
+              <p class="about-subtitle">By SSMG4, licensed under the AGPL-3.0 license</p>
+            </div>
           </div>
 
           <p class="about-body">
@@ -269,8 +299,6 @@
             if you'd like to run your own.
           </p>
 
-          <p class="about-line">WebSquared v{__APP_VERSION__}, AGPL-3.0</p>
-          <p class="about-line">Created by SSMG4 and contributors</p>
           <p class="about-line">
             <a href="https://github.com/Hexadecinull/WebSquared" target="_blank" rel="noopener noreferrer">GitHub →</a>
           </p>
@@ -279,6 +307,11 @@
             <button class="legal-btn" onclick={() => (openLegalDoc = { title: 'Privacy Policy', content: privacyDoc })}>Privacy Policy</button>
             <button class="legal-btn" onclick={() => (openLegalDoc = { title: 'Security Policy', content: securityDoc })}>Security Policy</button>
             <button class="legal-btn" onclick={() => (openLegalDoc = { title: 'Code of Conduct', content: conductDoc })}>Code of Conduct</button>
+          </div>
+
+          <div class="online-pill" title="People currently browsing through WebSquared">
+            <span class="online-dot"></span>
+            <span>{$onlineCount} {$onlineCount === 1 ? 'person' : 'people'} online</span>
           </div>
         </section>
       {/if}
@@ -354,6 +387,10 @@
   .category-nav button:hover { background: var(--surface-2); color: var(--text-1); }
   .category-nav button.active { background: var(--surface-2); color: var(--accent); }
   .category-nav svg { width: 1rem; height: 1rem; flex-shrink: 0; }
+  .nav-footer {
+    margin-top: auto; padding-top: 0.75rem; border-top: 1px solid var(--border);
+    font-size: 0.7rem; color: var(--text-3);
+  }
 
   .category-content { flex: 1; overflow-y: auto; padding: 1.25rem 1.5rem; }
   .category-panel { display: block; }
@@ -381,6 +418,15 @@
     padding: 0.05rem 0.3rem; font-family: 'SF Mono', Consolas, monospace; font-size: 0.9em;
   }
   .about-line { font-size: 0.8rem; color: var(--text-2); }
+
+  .about-header { display: flex; align-items: center; gap: 0.9rem; }
+  .about-logo { flex-shrink: 0; }
+  .about-header-text {
+    display: flex; flex-direction: column; justify-content: center;
+    height: 44px; gap: 0.15rem;
+  }
+  .about-title { font-size: 0.95rem; font-weight: 700; color: var(--text-1); }
+  .about-subtitle { font-size: 0.78rem; color: var(--text-2); }
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
 
@@ -449,6 +495,7 @@
     }
     .category-nav button { flex-shrink: 0; }
     .category-nav button span { display: none; }
+    .nav-footer { display: none; }
     .category-content { padding: 1rem; }
   }
 </style>

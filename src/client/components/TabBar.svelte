@@ -102,8 +102,8 @@
     background: transparent; border: none; border-radius: 6px;
     color: var(--text-2); cursor: pointer; transition: background 0.15s, color 0.15s, transform 0.15s;
   }
-  .new-tab:hover { background: var(--surface-2); color: var(--text-1); transform: rotate(90deg); }
-  .new-tab:active { transform: rotate(90deg) scale(0.88); }
+  .new-tab:hover { background: var(--surface-2); color: var(--text-1); }
+  .new-tab:active { transform: scale(0.88); }
   .new-tab svg { width: 14px; height: 14px; }
   @keyframes spin { to { transform: rotate(360deg); } }
 </style>

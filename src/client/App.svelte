@@ -80,6 +80,7 @@
     for (const [name, on] of Object.entries(flags)) {
       document.cookie = `${name}=${on ? '1' : '0'}; path=/; max-age=31536000; samesite=lax`;
     }
+    document.cookie = `w2_zoom=${$settings.pageZoom}; path=/; max-age=31536000; samesite=lax`;
   });
 
   async function registerSW() {

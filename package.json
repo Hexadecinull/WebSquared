@@ -11,7 +11,7 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "scripts": {
     "dev": "npm run build:workers && concurrently -n client,server -c cyan,yellow \"npm run dev:client\" \"npm run dev:server\"",

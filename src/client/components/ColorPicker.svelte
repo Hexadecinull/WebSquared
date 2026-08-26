@@ -123,8 +123,8 @@
 <style>
   .scrim { position: fixed; inset: 0; z-index: 240; }
   .picker {
-    position: absolute; z-index: 241; top: calc(100% + 0.5rem); left: 0;
-    width: 220px; background: var(--surface-1); border: 1px solid var(--border);
+    position: absolute; z-index: 241; top: calc(100% + 0.5rem); right: 0;
+    width: 220px; max-width: calc(100vw - 2rem); background: var(--surface-1); border: 1px solid var(--border);
     border-radius: 12px; padding: 0.75rem; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
     display: flex; flex-direction: column; gap: 0.65rem;
   }

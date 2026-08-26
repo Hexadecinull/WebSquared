@@ -16,6 +16,13 @@
   let historyIndex = $state(-1);
   let loadTimeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
+  // A conservative, opt-in allowlist: no payment (fraud risk if a proxied
+  // page phishes for card details), no usb/serial/hid/bluetooth (direct
+  // hardware access). Even this reduced set can still be misused by a
+  // malicious page, so it's off by default (see Settings > Browsing).
+  const PERMISSIONS_ALLOW = 'camera; microphone; geolocation; clipboard-read; clipboard-write; fullscreen; autoplay; picture-in-picture';
+  let iframeAllow = $derived($settings.sitePermissions ? PERMISSIONS_ALLOW : '');
+
   // Plain variable, not $state, so it doesn't trigger the effect below when it changes; it only guards against re-processing a `src` already handled.
   let lastProcessedSrc = '';
 
@@ -107,7 +114,7 @@
     bind:this={frame}
     {src}
     title="Proxied content"
-    allow="camera; fullscreen; geolocation; microphone"
+    allow={iframeAllow}
     referrerpolicy="no-referrer"
     onload={onLoad}
     data-desktop-mode={desktopMode}

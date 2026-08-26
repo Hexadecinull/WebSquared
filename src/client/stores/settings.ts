@@ -8,6 +8,7 @@ export interface Settings {
   searchEngine: 'google' | 'bing' | 'duckduckgo' | 'brave' | 'ecosia' | 'qwant';
   newTabPage: 'default' | 'blank';
   fontSize: 'small' | 'medium' | 'large';
+  pageZoom: number;
   smoothScrolling: boolean;
   blockAds: boolean;
   blockAdult: boolean;
@@ -16,6 +17,7 @@ export interface Settings {
   blockClickbait: boolean;
   saveHistory: boolean;
   openLinksInNewTab: boolean;
+  sitePermissions: boolean;
   devToolsEnabled: boolean;
   verboseLogging: boolean;
   exposeDebugHelpers: boolean;
@@ -34,6 +36,7 @@ const DEFAULTS: Settings = {
   searchEngine: 'google',
   newTabPage: 'default',
   fontSize: 'medium',
+  pageZoom: 100,
   smoothScrolling: true,
   blockAds: false,
   // On by default since this protects the server and visitor from known malicious/phishing domains, unlike the personal-preference filters below.
@@ -43,6 +46,7 @@ const DEFAULTS: Settings = {
   blockClickbait: false,
   saveHistory: true,
   openLinksInNewTab: false,
+  sitePermissions: false,
   devToolsEnabled: false,
   verboseLogging: false,
   exposeDebugHelpers: false,
