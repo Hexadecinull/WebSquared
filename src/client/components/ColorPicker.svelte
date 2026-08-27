@@ -1,6 +1,6 @@
 <script lang="ts">
   import { scale } from 'svelte/transition';
-  import { untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { hexToHsv, hsvToHex, isValidHex, normalizeHex } from '../lib/color';
 
   let { value, onChange, onClose }: { value: string; onChange: (hex: string) => void; onClose: () => void } = $props();
@@ -13,6 +13,19 @@
 
   let squareEl = $state<HTMLDivElement>();
   let hueEl = $state<HTMLDivElement>();
+  let pickerEl = $state<HTMLDivElement>();
+
+  // A document-level listener is far more robust than a full-screen scrim
+  // here: it doesn't depend on z-index or on some ancestor's transform
+  // accidentally re-scoping position:fixed, it just checks whether the
+  // interaction actually landed inside the popover.
+  onMount(() => {
+    function onDocPointerDown(e: PointerEvent) {
+      if (pickerEl && !pickerEl.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener('pointerdown', onDocPointerDown);
+    return () => document.removeEventListener('pointerdown', onDocPointerDown);
+  });
 
   function commit() {
     const hex = hsvToHex(h, s, v);
@@ -78,8 +91,7 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<div class="scrim" onclick={onClose} role="presentation"></div>
-<div class="picker" role="dialog" aria-label="Choose accent color" transition:scale={{ duration: 120, start: 0.95 }}>
+<div class="picker" bind:this={pickerEl} role="dialog" aria-label="Choose accent color" transition:scale={{ duration: 120, start: 0.95 }}>
   <div
     class="sv-square"
     bind:this={squareEl}
@@ -121,7 +133,6 @@
 </div>
 
 <style>
-  .scrim { position: fixed; inset: 0; z-index: 240; }
   .picker {
     position: absolute; z-index: 241; top: calc(100% + 0.5rem); right: 0;
     width: 220px; max-width: calc(100vw - 2rem); background: var(--surface-1); border: 1px solid var(--border);

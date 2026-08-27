@@ -4,7 +4,6 @@
   import { history } from '../stores/history';
   import { bookmarks } from '../stores/bookmarks';
   import { tabs } from '../stores/tabs';
-  import { onlineCount } from '../stores/presence';
   import Toggle from './Toggle.svelte';
   import HistoryManager from './HistoryManager.svelte';
   import BookmarksManager from './BookmarksManager.svelte';
@@ -25,7 +24,7 @@
   type Theme = 'dark' | 'light' | 'system' | 'amoled';
   type Engine = 'google' | 'bing' | 'duckduckgo' | 'brave' | 'ecosia' | 'qwant';
   type FontSize = 'small' | 'medium' | 'large';
-  type Category = 'appearance' | 'browsing' | 'history' | 'bookmarks' | 'privacy' | 'developer' | 'about';
+  type Category = 'appearance' | 'accessibility' | 'browsing' | 'history' | 'bookmarks' | 'privacy' | 'developer' | 'about';
 
   let activeCategory = $state<Category>('appearance');
 
@@ -47,6 +46,7 @@
 
   const CATEGORIES: { id: Category; label: string; icon: string }[] = [
     { id: 'appearance', label: 'Appearance', icon: 'M12 3v1m0 16v1m9-9h-1M4 12H3m15.36 6.36l-.7-.7M6.34 6.34l-.7-.7m12.02 0l-.7.7M6.34 17.66l-.7.7M12 7a5 5 0 100 10 5 5 0 000-10z' },
+    { id: 'accessibility', label: 'Accessibility', icon: 'M8 2a6 6 0 1 0 .01 0z M14 14l6 6' },
     { id: 'browsing', label: 'Browsing', icon: 'M3 12a9 9 0 1018 0 9 9 0 00-18 0zm9-9v18M3 12h18' },
     { id: 'history', label: 'History', icon: 'M3 3v5h5M3.05 13a9 9 0 106.2-8.7L3 8m9-3v5l4 2' },
     { id: 'bookmarks', label: 'Bookmarks', icon: 'M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z' },
@@ -77,12 +77,17 @@
           <span>{cat.label}</span>
         </button>
       {/each}
-      <div class="nav-footer">WebSquared {__APP_VERSION__}</div>
+      <div class="nav-footer">
+        <span>WebSquared {__APP_VERSION__}</span>
+        <span class="interpunct">·</span>
+        <a href="https://github.com/Hexadecinull/WebSquared" target="_blank" rel="noopener noreferrer">GitHub</a>
+      </div>
     </nav>
 
     <div class="category-content">
+      <div class="category-stack">
       {#key activeCategory}
-      <div class="category-panel" transition:fade={{ duration: 120 }}>
+      <div class="category-panel" in:fade={{ duration: 120 }} out:fade={{ duration: 120 }}>
       {#if activeCategory === 'appearance'}
         <section>
           <label>
@@ -94,30 +99,6 @@
               <option value="system">System</option>
             </select>
           </label>
-          <label>
-            Font size
-            <select value={$settings.fontSize} onchange={(e) => settings.set('fontSize', (e.currentTarget as HTMLSelectElement).value as FontSize)}>
-              <option value="small">Small</option>
-              <option value="medium">Medium</option>
-              <option value="large">Large</option>
-            </select>
-          </label>
-          <label>
-            Page zoom
-            <select value={$settings.pageZoom} onchange={(e) => settings.set('pageZoom', Number((e.currentTarget as HTMLSelectElement).value))}>
-              <option value="50">50%</option>
-              <option value="67">67%</option>
-              <option value="75">75%</option>
-              <option value="90">90%</option>
-              <option value="100">100%</option>
-              <option value="110">110%</option>
-              <option value="125">125%</option>
-              <option value="150">150%</option>
-              <option value="175">175%</option>
-              <option value="200">200%</option>
-            </select>
-          </label>
-          <p class="hint">Zooms the content of sites you visit through WebSquared. Separate from Font size above, which only affects WebSquared's own interface.</p>
           <label class="toggle-row">
             Smooth scrolling
             <Toggle checked={$settings.smoothScrolling} onChange={(v) => settings.set('smoothScrolling', v)} ariaLabel="Smooth scrolling" />
@@ -149,6 +130,34 @@
             <Toggle checked={$settings.deeperAccent} onChange={(v) => settings.set('deeperAccent', v)} ariaLabel="Deeper accent" />
           </label>
           <p class="hint">Deeper accent tints the background, panels, and borders with your accent color too, instead of just buttons and links.</p>
+        </section>
+      {:else if activeCategory === 'accessibility'}
+        <section>
+          <label>
+            Font size
+            <select value={$settings.fontSize} onchange={(e) => settings.set('fontSize', (e.currentTarget as HTMLSelectElement).value as FontSize)}>
+              <option value="small">Small</option>
+              <option value="medium">Medium</option>
+              <option value="large">Large</option>
+            </select>
+          </label>
+          <p class="hint">Only affects WebSquared's own interface (this settings panel, tabs, toolbar).</p>
+          <label>
+            Page zoom
+            <select value={String($settings.pageZoom)} onchange={(e) => settings.set('pageZoom', Number((e.currentTarget as HTMLSelectElement).value))}>
+              <option value="50">50%</option>
+              <option value="67">67%</option>
+              <option value="75">75%</option>
+              <option value="90">90%</option>
+              <option value="100">100%</option>
+              <option value="110">110%</option>
+              <option value="125">125%</option>
+              <option value="150">150%</option>
+              <option value="175">175%</option>
+              <option value="200">200%</option>
+            </select>
+          </label>
+          <p class="hint">Zooms the content of sites you visit through WebSquared, separate from Font size above.</p>
         </section>
       {:else if activeCategory === 'browsing'}
         <section>
@@ -299,24 +308,17 @@
             if you'd like to run your own.
           </p>
 
-          <p class="about-line">
-            <a href="https://github.com/Hexadecinull/WebSquared" target="_blank" rel="noopener noreferrer">GitHub →</a>
-          </p>
           <div class="legal-links">
             <button class="legal-btn" onclick={() => (openLegalDoc = { title: 'Terms of Service', content: termsDoc })}>Terms of Service</button>
             <button class="legal-btn" onclick={() => (openLegalDoc = { title: 'Privacy Policy', content: privacyDoc })}>Privacy Policy</button>
             <button class="legal-btn" onclick={() => (openLegalDoc = { title: 'Security Policy', content: securityDoc })}>Security Policy</button>
             <button class="legal-btn" onclick={() => (openLegalDoc = { title: 'Code of Conduct', content: conductDoc })}>Code of Conduct</button>
           </div>
-
-          <div class="online-pill" title="People currently browsing through WebSquared">
-            <span class="online-dot"></span>
-            <span>{$onlineCount} {$onlineCount === 1 ? 'person' : 'people'} online</span>
-          </div>
         </section>
       {/if}
       </div>
       {/key}
+      </div>
     </div>
   </div>
 </div>
@@ -389,11 +391,16 @@
   .category-nav svg { width: 1rem; height: 1rem; flex-shrink: 0; }
   .nav-footer {
     margin-top: auto; padding-top: 0.75rem; border-top: 1px solid var(--border);
-    font-size: 0.7rem; color: var(--text-3);
+    padding-left: 0.7rem; font-size: 0.7rem; color: var(--text-3);
+    display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;
   }
+  .nav-footer .interpunct { color: var(--text-3); }
+  .nav-footer a { color: var(--text-2); text-decoration: none; }
+  .nav-footer a:hover { color: var(--accent); text-decoration: underline; }
 
   .category-content { flex: 1; overflow-y: auto; padding: 1.25rem 1.5rem; }
-  .category-panel { display: block; }
+  .category-stack { display: grid; }
+  .category-panel { grid-area: 1 / 1; min-width: 0; }
   section { display: flex; flex-direction: column; gap: 0.9rem; }
   label {
     display: flex; align-items: center; justify-content: space-between;
@@ -417,7 +424,6 @@
     background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px;
     padding: 0.05rem 0.3rem; font-family: 'SF Mono', Consolas, monospace; font-size: 0.9em;
   }
-  .about-line { font-size: 0.8rem; color: var(--text-2); }
 
   .about-header { display: flex; align-items: center; gap: 0.9rem; }
   .about-logo { flex-shrink: 0; }
@@ -465,22 +471,6 @@
     font-family: inherit; cursor: pointer; transition: background 0.15s;
   }
   .legal-btn:hover { background: var(--border); }
-
-  .online-pill {
-    display: inline-flex; align-items: center; gap: 0.4rem; width: fit-content;
-    padding: 0.3rem 0.7rem; border-radius: 999px; margin-bottom: 0.3rem;
-    background: rgba(63, 185, 80, 0.12); border: 1px solid rgba(63, 185, 80, 0.35);
-    color: #3fb950; font-size: 0.75rem; font-weight: 500;
-  }
-  .online-dot {
-    width: 0.45rem; height: 0.45rem; border-radius: 50%; background: #3fb950;
-    animation: pulse 1.8s ease-in-out infinite; flex-shrink: 0;
-  }
-  @keyframes pulse {
-    0% { transform: scale(0.85); box-shadow: 0 0 0 0 rgba(63, 185, 80, 0.5); }
-    50% { transform: scale(1.15); box-shadow: 0 0 0 4px rgba(63, 185, 80, 0); }
-    100% { transform: scale(0.85); box-shadow: 0 0 0 0 rgba(63, 185, 80, 0); }
-  }
 
   @media (max-width: 640px) {
     .modal {
