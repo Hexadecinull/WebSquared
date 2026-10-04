@@ -29,7 +29,7 @@
     "cheerio": "^1.0.0",
     "express": "^5.2.1",
     "express-rate-limit": "^8.6.2",
-    "ws": "^8.21.3"
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -37,7 +37,7 @@
     "@types/eslint": "^9.6.1",
     "@types/express": "^5.0.6",
     "@types/node": "26.2.0",
-    "@types/ws": "^8.5.13",
+    "@types/ws": "^8.18.2",
     "concurrently": "10.0.5",
     "esbuild": "0.28.2",
     "eslint": "10.9.0",
